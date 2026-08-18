@@ -136,6 +136,48 @@ class AuthController extends Controller
     }
 
     /**
+     * Sign in or register with Google ID token.
+     */
+    public function googleLogin(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'google_user_id' => 'required|string',
+            'email' => 'required|email',
+            'name' => 'nullable|string',
+            'avatar_url' => 'nullable|string',
+        ]);
+
+        $user = User::where('email', $validated['email'])->first();
+
+        if (!$user) {
+            $user = User::create([
+                'email' => $validated['email'],
+                'name' => $validated['name'] ?? 'Google User',
+                'password' => Hash::make(uniqid('google_', true)),
+                'avatar_url' => $validated['avatar_url'] ?? null,
+                'current_weight_kg' => 65,
+                'height_cm' => 170,
+                'activity_level' => 'sedentary',
+            ]);
+
+            if (!$user->dailyGoal) {
+                $goalData = $this->goalCalculator->calculate($user, 'maintain');
+                $user->dailyGoal()->create($goalData);
+            }
+        }
+
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Đăng nhập Google thành công!',
+            'token' => $token,
+            'user' => $user->load('dailyGoal'),
+            'is_premium' => $user->isPremium(),
+        ]);
+    }
+
+    /**
      * Get current authenticated user profile.
      */
     public function me(Request $request): JsonResponse

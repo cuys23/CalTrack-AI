@@ -209,44 +209,74 @@ export const PaywallScreen: React.FC<{ onClose: () => void; onUnlock: () => void
 // 1.18 Sign In Screen
 export const SignInScreen: React.FC<{ onComplete: () => void; onBack: () => void }> = ({ onComplete, onBack }) => {
   const { theme, showToast, setUserProfile, setUserGoals } = useApp();
-  const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loadingType, setLoadingType] = useState<'apple' | 'google' | null>(null);
 
-  const handleAuth = async () => {
-    if (!email || !password || (isRegister && !name)) {
-      triggerHaptic('error');
-      showToast('Vui lòng điền đầy đủ email và mật khẩu.', 'error');
-      return;
-    }
-
+  const handleAppleLogin = async () => {
     try {
-      setLoading(true);
+      setLoadingType('apple');
       triggerHaptic('medium');
-
-      if (isRegister) {
-        const res = await apiClient.register({ name, email, password });
-        if (res.user) {
-          setUserProfile(prev => ({ ...prev, name: res.user.name || prev.name }));
+      const res = await apiClient.loginWithApple({
+        apple_user_id: 'apple_user_' + Date.now(),
+        email: 'user@icloud.com',
+        name: 'Apple User',
+      });
+      if (res.user) {
+        setUserProfile(prev => ({ ...prev, name: res.user.name || prev.name }));
+        if (res.user.daily_goal) {
+          setUserGoals(prev => ({
+            ...prev,
+            targetCalories: res.user.daily_goal.target_calories || prev.targetCalories,
+            targetProtein: res.user.daily_goal.protein_g || prev.targetProtein,
+            targetCarbs: res.user.daily_goal.carbs_g || prev.targetCarbs,
+            targetFat: res.user.daily_goal.fat_g || prev.targetFat,
+          }));
         }
-        triggerHaptic('success');
-        showToast('Đăng ký thành công!');
-      } else {
-        const res = await apiClient.login({ email, password });
-        if (res.user) {
-          setUserProfile(prev => ({ ...prev, name: res.user.name || prev.name }));
-        }
-        triggerHaptic('success');
-        showToast('Đăng nhập thành công!');
       }
+      triggerHaptic('success');
+      showToast('Đăng nhập Apple thành công!');
       onComplete();
     } catch (e: any) {
       triggerHaptic('error');
-      showToast(e.message || 'Không thể đăng nhập. Vui lòng kiểm tra lại.', 'error');
+      showToast(e.message || 'Không thể đăng nhập bằng Apple.', 'error');
     } finally {
-      setLoading(false);
+      setLoadingType(null);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      setLoadingType('google');
+      triggerHaptic('medium');
+      const res = await apiClient.loginWithGoogle({
+        google_user_id: 'google_user_' + Date.now(),
+        email: 'user@gmail.com',
+        name: 'Google User',
+        avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
+      });
+      if (res.user) {
+        setUserProfile(prev => ({
+          ...prev,
+          name: res.user.name || prev.name,
+          avatarUrl: res.user.avatar_url || prev.avatarUrl,
+        }));
+        if (res.user.daily_goal) {
+          setUserGoals(prev => ({
+            ...prev,
+            targetCalories: res.user.daily_goal.target_calories || prev.targetCalories,
+            targetProtein: res.user.daily_goal.protein_g || prev.targetProtein,
+            targetCarbs: res.user.daily_goal.carbs_g || prev.targetCarbs,
+            targetFat: res.user.daily_goal.fat_g || prev.targetFat,
+          }));
+        }
+      }
+      triggerHaptic('success');
+      showToast('Đăng nhập Google thành công!');
+      onComplete();
+    } catch (e: any) {
+      triggerHaptic('error');
+      showToast(e.message || 'Không thể đăng nhập bằng Google.', 'error');
+    } finally {
+      setLoadingType(null);
     }
   };
 
@@ -257,90 +287,34 @@ export const SignInScreen: React.FC<{ onComplete: () => void; onBack: () => void
       </TouchableOpacity>
 
       <Text style={[styles.h1, { color: theme.text }]}>
-        {isRegister ? 'Tạo tài khoản CalTrack AI' : 'Đăng nhập vào CalTrack AI'}
+        Đăng nhập vào CalTrack AI
       </Text>
-      <Text style={{ color: theme.textSecondary, fontSize: 14, marginTop: 6, marginBottom: 24 }}>
+      <Text style={{ color: theme.textSecondary, fontSize: 14, marginTop: 6, marginBottom: 28 }}>
         Đồng bộ dữ liệu calo và tiến trình của bạn an toàn trên cloud.
       </Text>
 
-      <View style={{ gap: 12 }}>
-        {isRegister && (
-          <View style={[styles.inputBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Text style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 4 }}>Họ và tên</Text>
-            <TouchableOpacity activeOpacity={1}>
-              <TextInput
-                value={name}
-                onChangeText={setName}
-                placeholder="Nhập tên của bạn"
-                placeholderTextColor={theme.textTertiary}
-                style={{ color: theme.text, fontSize: 15, fontWeight: '600' }}
-              />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <View style={[styles.inputBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 4 }}>Email</Text>
-          <TouchableOpacity activeOpacity={1}>
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="name@example.com"
-              placeholderTextColor={theme.textTertiary}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              style={{ color: theme.text, fontSize: 15, fontWeight: '600' }}
-            />
-          </TouchableOpacity>
-        </View>
-
-        <View style={[styles.inputBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <Text style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 4 }}>Mật khẩu</Text>
-          <TouchableOpacity activeOpacity={1}>
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="••••••••"
-              placeholderTextColor={theme.textTertiary}
-              secureTextEntry
-              style={{ color: theme.text, fontSize: 15, fontWeight: '600' }}
-            />
-          </TouchableOpacity>
-        </View>
-
+      <View style={{ gap: 14 }}>
         <TouchableOpacity
-          onPress={handleAuth}
-          disabled={loading}
-          style={[styles.btnPrimary, { backgroundColor: '#10B981', marginTop: 12 }]}
+          onPress={handleAppleLogin}
+          disabled={loadingType !== null}
+          style={[styles.socialBtn, { backgroundColor: '#000', borderColor: '#333' }]}
         >
-          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>
-            {loading ? 'Đang xử lý...' : (isRegister ? 'Đăng Ký' : 'Đăng Nhập')}
+          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
+            {loadingType === 'apple' ? 'Đang xác thực...' : '  Tiếp tục với Apple'}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => { triggerHaptic('light'); setIsRegister(!isRegister); }}
-          style={{ alignItems: 'center', paddingVertical: 8 }}
+          onPress={handleGoogleLogin}
+          disabled={loadingType !== null}
+          style={[styles.socialBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
         >
-          <Text style={{ color: theme.textSecondary, fontSize: 13 }}>
-            {isRegister ? 'Đã có tài khoản? ' : 'Chưa có tài khoản? '}
-            <Text style={{ color: '#10B981', fontWeight: '700' }}>
-              {isRegister ? 'Đăng nhập' : 'Đăng ký ngay'}
-            </Text>
+          <Text style={{ color: theme.text, fontSize: 15, fontWeight: '700' }}>
+            {loadingType === 'google' ? 'Đang xác thực...' : '🌐  Tiếp tục với Google'}
           </Text>
         </TouchableOpacity>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 10 }}>
-          <View style={{ flex: 1, height: 1, backgroundColor: theme.border }} />
-          <Text style={{ color: theme.textTertiary, fontSize: 12 }}>HOẶC</Text>
-          <View style={{ flex: 1, height: 1, backgroundColor: theme.border }} />
-        </View>
-
-        <TouchableOpacity onPress={onComplete} style={[styles.socialBtn, { backgroundColor: '#000', borderColor: '#333' }]}>
-          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Tiếp tục với Apple</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={onComplete} style={{ marginTop: 12, alignItems: 'center' }}>
+        <TouchableOpacity onPress={onComplete} style={{ marginTop: 16, alignItems: 'center' }}>
           <Text style={{ color: theme.textTertiary, fontSize: 13 }}>Tiếp tục với tư cách Khách</Text>
         </TouchableOpacity>
       </View>

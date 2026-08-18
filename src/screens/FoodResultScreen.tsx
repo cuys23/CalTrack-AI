@@ -10,10 +10,11 @@ import { triggerHaptic } from '../utils/haptics';
 interface FoodResultScreenProps {
   foodItem: FoodItem;
   onSave: (food: FoodItem) => void;
+  onFix?: () => void;
   onClose: () => void;
 }
 
-export const FoodResultScreen: React.FC<FoodResultScreenProps> = ({ foodItem, onSave, onClose }) => {
+export const FoodResultScreen: React.FC<FoodResultScreenProps> = ({ foodItem, onSave, onFix, onClose }) => {
   const { theme } = useApp();
   const [food, setFood] = useState<FoodItem>(foodItem);
 
@@ -56,6 +57,12 @@ export const FoodResultScreen: React.FC<FoodResultScreenProps> = ({ foodItem, on
         <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
           <X size={20} color="#fff" />
         </TouchableOpacity>
+        {onFix && (
+          <TouchableOpacity onPress={onFix} style={styles.fixBtn}>
+            <Sparkles size={14} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800', marginLeft: 5 }}>AI đoán chưa đúng?</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* 2. Overlaid Card */}
@@ -196,6 +203,7 @@ const styles = StyleSheet.create({
   imageContainer: { width: '100%', height: 280, position: 'relative' },
   heroImage: { width: '100%', height: '100%', borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
   closeBtn: { position: 'absolute', top: 50, left: 20, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
+  fixBtn: { position: 'absolute', top: 50, right: 20, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.5)' },
   card: { padding: 20, borderRadius: 24, borderWidth: 1 },
   dishTitle: { fontSize: 20, fontWeight: '800' },
   stepper: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, padding: 3 },

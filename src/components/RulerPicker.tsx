@@ -21,21 +21,25 @@ export const RulerPicker: React.FC<RulerPickerProps> = ({
   unit = 'kg'
 }) => {
   const { theme } = useApp();
+  const isInteger = unit === 'tuổi' || unit === 'cm' || step >= 1;
 
   const handleStep = (delta: number) => {
     triggerHaptic('tick');
-    const next = +(value + delta).toFixed(1);
+    const raw = value + delta;
+    const next = isInteger ? Math.round(raw) : +raw.toFixed(1);
     if (next >= min && next <= max) {
       onChange(next);
     }
   };
+
+  const displayValue = isInteger ? Math.round(value).toString() : value.toFixed(1);
 
   return (
     <View style={{ alignItems: 'center', width: '100%', marginVertical: 10 }}>
       {/* Big Number */}
       <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginBottom: 12 }}>
         <Text style={{ fontSize: 44, fontWeight: '900', color: theme.text, letterSpacing: -1 }}>
-          {value.toFixed(1)}
+          {displayValue}
         </Text>
         <Text style={{ fontSize: 18, fontWeight: '700', color: theme.textSecondary }}>
           {unit}
@@ -45,36 +49,36 @@ export const RulerPicker: React.FC<RulerPickerProps> = ({
       {/* Stepper Buttons and Visual Ruler */}
       <View style={[styles.rulerContainer, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}>
         <TouchableOpacity
-          onPress={() => handleStep(-1.0)}
+          onPress={() => handleStep(isInteger ? -5 : -1.0)}
           style={[styles.stepBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
         >
-          <Text style={{ color: theme.text, fontSize: 16, fontWeight: '800' }}>−1</Text>
+          <Text style={{ color: theme.text, fontSize: 15, fontWeight: '800' }}>{isInteger ? '−5' : '−1'}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => handleStep(-0.1)}
+          onPress={() => handleStep(isInteger ? -1 : -0.1)}
           style={[styles.stepBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
         >
-          <Text style={{ color: theme.text, fontSize: 14, fontWeight: '700' }}>−0.1</Text>
+          <Text style={{ color: theme.text, fontSize: 14, fontWeight: '700' }}>{isInteger ? '−1' : '−0.1'}</Text>
         </TouchableOpacity>
 
         {/* Center Pointer */}
-        <View style={{ alignItems: 'center', marginHorizontal: 16 }}>
+        <View style={{ alignItems: 'center', marginHorizontal: 12 }}>
           <View style={{ width: 3, height: 32, backgroundColor: theme.accent, borderRadius: 2 }} />
         </View>
 
         <TouchableOpacity
-          onPress={() => handleStep(0.1)}
+          onPress={() => handleStep(isInteger ? 1 : 0.1)}
           style={[styles.stepBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
         >
-          <Text style={{ color: theme.text, fontSize: 14, fontWeight: '700' }}>+0.1</Text>
+          <Text style={{ color: theme.text, fontSize: 14, fontWeight: '700' }}>{isInteger ? '+1' : '+0.1'}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => handleStep(1.0)}
+          onPress={() => handleStep(isInteger ? 5 : 1.0)}
           style={[styles.stepBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
         >
-          <Text style={{ color: theme.text, fontSize: 16, fontWeight: '800' }}>+1</Text>
+          <Text style={{ color: theme.text, fontSize: 15, fontWeight: '800' }}>{isInteger ? '+5' : '+1'}</Text>
         </TouchableOpacity>
       </View>
     </View>

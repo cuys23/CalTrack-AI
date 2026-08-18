@@ -7,7 +7,7 @@ import { FOOD_DATABASE, FKB_DATABASE, AiFoodEngine } from '../../services/aiFood
 import { triggerHaptic } from '../../utils/haptics';
 
 // 2.8 Food Search Screen
-export const FoodSearchScreen: React.FC<{ onSelectFood: (food: FoodItem) => void; onBack: () => void }> = ({ onSelectFood, onBack }) => {
+export const FoodSearchScreen: React.FC<{ onSelectFood: (food: FoodItem) => void; onCreateFood?: () => void; onBack: () => void }> = ({ onSelectFood, onCreateFood, onBack }) => {
   const { theme } = useApp();
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'all' | 'vietnamese' | 'my_foods'>('all');
@@ -30,7 +30,13 @@ export const FoodSearchScreen: React.FC<{ onSelectFood: (food: FoodItem) => void
           <ChevronLeft size={20} color={theme.text} />
         </TouchableOpacity>
         <Text style={[styles.screenTitle, { color: theme.text }]}>Tìm kiếm món ăn</Text>
-        <View style={{ width: 36 }} />
+        {onCreateFood ? (
+          <TouchableOpacity onPress={onCreateFood} style={styles.iconBtn}>
+            <Plus size={20} color={theme.text} />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 36 }} />
+        )}
       </View>
 
       {/* Search Input */}

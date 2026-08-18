@@ -92,8 +92,17 @@ class ApiClient {
     return data;
   }
 
-  public async login(payload: any) {
-    const data = await this.request<{ success: boolean; token: string; user: any }>('/auth/login', {
+  public async loginWithApple(payload: { apple_user_id: string; email?: string; name?: string }) {
+    const data = await this.request<{ success: boolean; token: string; user: any; is_premium: boolean }>('/auth/apple', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    if (data.token) await this.setToken(data.token);
+    return data;
+  }
+
+  public async loginWithGoogle(payload: { google_user_id: string; email: string; name?: string; avatar_url?: string }) {
+    const data = await this.request<{ success: boolean; token: string; user: any; is_premium: boolean }>('/auth/google', {
       method: 'POST',
       body: JSON.stringify(payload),
     });

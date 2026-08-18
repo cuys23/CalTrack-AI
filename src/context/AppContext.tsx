@@ -24,8 +24,6 @@ interface AppContextType {
   themeMode: ThemeMode;
   setThemeMode: (t: ThemeMode) => void;
   theme: AppTheme;
-  activeTab: 'home' | 'progress' | 'saved_meals' | 'profile';
-  setActiveTab: (t: 'home' | 'progress' | 'saved_meals' | 'profile') => void;
   selectedDate: string;
   setSelectedDate: (d: string) => void;
 
@@ -176,7 +174,6 @@ const INITIAL_ACHIEVEMENTS: Achievement[] = [
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [themeMode, setThemeModeState] = useState<ThemeMode>('dark');
-  const [activeTab, setActiveTab] = useState<'home' | 'progress' | 'saved_meals' | 'profile'>('home');
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
 
   const [userProfile, setUserProfile] = useState<UserProfile>(DEFAULT_PROFILE);
@@ -514,8 +511,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         themeMode,
         setThemeMode,
         theme,
-        activeTab,
-        setActiveTab,
         selectedDate,
         setSelectedDate,
         userProfile,

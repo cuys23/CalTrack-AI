@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, StatusBar, Modal, ScrollView } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, StyleSheet, TouchableOpacity, Text, StatusBar, Modal, ScrollView, ActivityIndicator, BackHandler } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Home, TrendingUp, Plus, User, Sparkles, Layers, X, Undo } from 'lucide-react-native';
 import { AppProvider, useApp } from './src/context/AppContext';
@@ -15,12 +16,12 @@ import { SplashScreen, WelcomeScreen, PaywallScreen, SignInScreen } from './src/
 import { NutritionDetailScreen, LogMenuSheet, TextLogSheet } from './src/screens/dashboard/NutritionDetailScreen';
 import { FoodSearchScreen, StreakDetailScreen, AchievementsScreen, ReferralScreen } from './src/screens/library/LibraryScreens';
 import { ExerciseLogScreen, HealthSyncSettingsScreen } from './src/screens/exercise/ExerciseScreens';
-import { WeightLogSheet, MeasurementLogSheet, PhotoCompareScreen, WeeklyReportScreen } from './src/screens/progress/ProgressSubScreens';
+import { MeasurementLogSheet, PhotoCompareScreen, WeeklyReportScreen } from './src/screens/progress/ProgressSubScreens';
 import { VoiceLogSheet, FixResultSheet, QuickAddSheet, AddExerciseSheet } from './src/screens/scanning/ScanningSubSheets';
 import { FoodDetailScreen, CreateFoodScreen, SavedMealsScreen, RecipeImportScreen } from './src/screens/library/RecipeAndSavedScreens';
 import { NotificationSettingsScreen, WidgetsAndWatchScreen, EditGoalsScreen } from './src/screens/gamification/WidgetsAndSettingsScreens';
 
-import { AiFoodEngine, FKB_DATABASE } from './src/services/aiFoodEngine';
+import { AiFoodEngine } from './src/services/aiFoodEngine';
 import { apiClient } from './src/services/apiClient';
 import { FoodItem } from './src/types';
 import { triggerHaptic } from './src/utils/haptics';
@@ -32,6 +33,8 @@ export type ScreenId =
   | 'onboarding'
   | 'paywall'
   | 'signin'
+  | 'camera'
+  | 'food_result'
   | 'nutrition_detail'
   | 'food_search'
   | 'food_detail'
@@ -52,26 +55,73 @@ export type ScreenId =
   | 'referral'
   | 'profile';
 
-function MainApp() {
-  const { theme, themeMode, addFoodLog, foodLogs, toasts, removeToast } = useApp();
+type SheetId = 'log' | 'text' | 'voice' | 'quick_add' | 'add_exercise' | 'fix_result';
 
-  const [currentScreen, setCurrentScreen] = useState<ScreenId>('home');
-  const [showLogMenu, setShowLogMenu] = useState(false);
-  const [showCamera, setShowCamera] = useState(false);
+const ONBOARDED_KEY = 'caltrack_onboarded';
+
+/** Routes drawn edge-to-edge: no safe-area padding, no tab bar. */
+const IMMERSIVE: ScreenId[] = ['camera', 'food_result'];
+const TAB_ROUTES: ScreenId[] = ['home', 'progress', 'food_search', 'profile'];
+
+function MainApp() {
+  const { theme, themeMode, addFoodLog, addExercise, foodLogs, toasts, removeToast } = useApp();
+
+  const [stack, setStack] = useState<ScreenId[]>(['splash']);
+  const currentScreen = stack[stack.length - 1];
+
+  const push = useCallback((screen: ScreenId) => {
+    setStack((prev) => (prev[prev.length - 1] === screen ? prev : [...prev, screen]));
+  }, []);
+  const back = useCallback(() => {
+    setStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : ['home']));
+  }, []);
+  const replace = useCallback((screen: ScreenId) => {
+    setStack((prev) => [...prev.slice(0, -1), screen]);
+  }, []);
+  const reset = useCallback((screen: ScreenId) => setStack([screen]), []);
+
+  const [sheet, setSheet] = useState<SheetId | null>(null);
   const [cameraMode, setCameraMode] = useState<'food' | 'barcode' | 'label'>('food');
-  const [showTextLog, setShowTextLog] = useState(false);
-  const [showVoiceLog, setShowVoiceLog] = useState(false);
-  const [showQuickAdd, setShowQuickAdd] = useState(false);
-  const [showWeightLog, setShowWeightLog] = useState(false);
-  const [showAddExercise, setShowAddExercise] = useState(false);
-  const [showFixResult, setShowFixResult] = useState(false);
   const [analyzedFood, setAnalyzedFood] = useState<FoodItem | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const [selectedDetailFood, setSelectedDetailFood] = useState<FoodItem | null>(null);
   const [showScreenJumper, setShowScreenJumper] = useState(false);
 
+  // Android hardware back: close sheet, else pop the stack, else let the OS exit.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (sheet) {
+        setSheet(null);
+        return true;
+      }
+      if (stack.length > 1) {
+        back();
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [sheet, stack.length, back]);
+
+  const markOnboarded = () => AsyncStorage.setItem(ONBOARDED_KEY, '1');
+
+  const openCamera = (mode: 'food' | 'barcode' | 'label') => {
+    setSheet(null);
+    setCameraMode(mode);
+    push('camera');
+  };
+
+  const showResult = (food: FoodItem) => {
+    setAnalyzedFood(food);
+    setSheet(null);
+    push('food_result');
+  };
+
   const handleCapturePhoto = async (imageUri: string, isBarcode = false) => {
-    setShowCamera(false);
     triggerHaptic('success');
+    setAnalyzedFood(null);
+    setAnalyzing(true);
+    replace('food_result');
 
     let item: FoodItem;
     if (isBarcode || cameraMode === 'barcode') {
@@ -112,51 +162,100 @@ function MainApp() {
       }
     }
     setAnalyzedFood(item);
+    setAnalyzing(false);
   };
 
   const handleSaveAnalyzedFood = (food: FoodItem) => {
     addFoodLog(food);
     setAnalyzedFood(null);
-    setCurrentScreen('home');
+    reset('home');
+  };
+
+  const openFoodDetail = (food: FoodItem) => {
+    setSelectedDetailFood(food);
+    push('food_detail');
   };
 
   const renderActiveScreen = () => {
     switch (currentScreen) {
       case 'splash':
-        return <SplashScreen onFinish={() => setCurrentScreen('welcome')} />;
+        return (
+          <SplashScreen
+            onFinish={async () => {
+              const done = await AsyncStorage.getItem(ONBOARDED_KEY);
+              reset(done ? 'home' : 'welcome');
+            }}
+          />
+        );
       case 'welcome':
-        return <WelcomeScreen onStart={() => setCurrentScreen('onboarding')} onSignIn={() => setCurrentScreen('signin')} />;
+        return <WelcomeScreen onStart={() => push('onboarding')} onSignIn={() => push('signin')} />;
       case 'onboarding':
-        return <OnboardingScreen onFinish={() => setCurrentScreen('home')} />;
+        return (
+          <OnboardingScreen
+            onFinish={() => {
+              markOnboarded();
+              // Re-run from Profile returns there; first run continues to the paywall.
+              if (stack.includes('profile')) back();
+              else reset('paywall');
+            }}
+          />
+        );
       case 'paywall':
-        return <PaywallScreen onClose={() => setCurrentScreen('home')} onUnlock={() => setCurrentScreen('home')} />;
+        return <PaywallScreen onClose={() => reset('home')} onUnlock={() => reset('home')} />;
       case 'signin':
-        return <SignInScreen onComplete={() => setCurrentScreen('home')} onBack={() => setCurrentScreen('welcome')} />;
+        return (
+          <SignInScreen
+            onComplete={() => {
+              markOnboarded();
+              reset('home');
+            }}
+            onBack={back}
+          />
+        );
       case 'home':
         return (
           <HomeScreen
-            onOpenScan={() => setShowLogMenu(true)}
-            onOpenProgress={() => setCurrentScreen('progress')}
-            onOpenProfile={() => setCurrentScreen('profile')}
-            onOpenNutritionDetail={() => setCurrentScreen('nutrition_detail')}
-            onOpenStreak={() => setCurrentScreen('streak_detail')}
-            onOpenExercise={() => setCurrentScreen('exercise')}
-            onSelectFood={(food) => {
-              setSelectedDetailFood(food);
-              setCurrentScreen('food_detail');
+            onOpenScan={() => setSheet('log')}
+            onOpenProgress={() => reset('progress')}
+            onOpenProfile={() => reset('profile')}
+            onOpenNutritionDetail={() => push('nutrition_detail')}
+            onOpenStreak={() => push('streak_detail')}
+            onOpenExercise={() => push('exercise')}
+            onSelectFood={openFoodDetail}
+          />
+        );
+      case 'camera':
+        return <CameraScanScreen onCapture={handleCapturePhoto} onClose={back} />;
+      case 'food_result':
+        if (analyzing || !analyzedFood) {
+          return (
+            <View style={[styles.loading, { backgroundColor: theme.bg }]}>
+              <ActivityIndicator size="large" color={theme.accent} />
+              <Text style={{ marginTop: 12, color: theme.textSecondary, fontWeight: '700' }}>
+                AI đang phân tích món ăn...
+              </Text>
+            </View>
+          );
+        }
+        return (
+          <FoodResultScreen
+            foodItem={analyzedFood}
+            onSave={handleSaveAnalyzedFood}
+            onFix={() => setSheet('fix_result')}
+            onClose={() => {
+              setAnalyzedFood(null);
+              back();
             }}
           />
         );
       case 'nutrition_detail':
-        return <NutritionDetailScreen onBack={() => setCurrentScreen('home')} />;
+        return <NutritionDetailScreen onBack={back} />;
       case 'food_search':
         return (
           <FoodSearchScreen
-            onSelectFood={(food) => {
-              setSelectedDetailFood(food);
-              setCurrentScreen('food_detail');
-            }}
-            onBack={() => setCurrentScreen('home')}
+            onSelectFood={openFoodDetail}
+            onCreateFood={() => push('create_food')}
+            onBack={back}
           />
         );
       case 'food_detail':
@@ -177,9 +276,9 @@ function MainApp() {
             })}
             onSave={() => {
               if (selectedDetailFood) addFoodLog(selectedDetailFood);
-              setCurrentScreen('home');
+              back();
             }}
-            onBack={() => setCurrentScreen('home')}
+            onBack={back}
           />
         );
       case 'create_food':
@@ -187,107 +286,149 @@ function MainApp() {
           <CreateFoodScreen
             onCreated={(food) => {
               addFoodLog(food);
-              setCurrentScreen('home');
+              back();
             }}
-            onBack={() => setCurrentScreen('home')}
+            onBack={back}
           />
         );
       case 'saved_meals':
-        return (
-          <SavedMealsScreen
-            onSelectFood={(food) => {
-              setSelectedDetailFood(food);
-              setCurrentScreen('food_detail');
-            }}
-            onBack={() => setCurrentScreen('home')}
-          />
-        );
+        return <SavedMealsScreen onSelectFood={openFoodDetail} onBack={back} />;
       case 'recipe_import':
         return (
           <RecipeImportScreen
             onImported={(food) => {
               addFoodLog(food);
-              setCurrentScreen('home');
+              back();
             }}
-            onBack={() => setCurrentScreen('home')}
+            onBack={back}
           />
         );
       case 'progress':
         return (
           <ProgressScreen
-            onBack={() => setCurrentScreen('home')}
-            onOpenCompare={() => setCurrentScreen('photo_compare')}
-            onOpenWeeklyReport={() => setCurrentScreen('weekly_report')}
-            onOpenMeasurements={() => setCurrentScreen('measurement_log')}
+            onBack={back}
+            onOpenCompare={() => push('photo_compare')}
+            onOpenWeeklyReport={() => push('weekly_report')}
+            onOpenMeasurements={() => push('measurement_log')}
           />
         );
       case 'measurement_log':
-        return <MeasurementLogSheet onSave={() => setCurrentScreen('progress')} onClose={() => setCurrentScreen('progress')} />;
+        return <MeasurementLogSheet onSave={back} onClose={back} />;
       case 'photo_compare':
-        return <PhotoCompareScreen onBack={() => setCurrentScreen('progress')} />;
+        return <PhotoCompareScreen onBack={back} />;
       case 'weekly_report':
-        return <WeeklyReportScreen onBack={() => setCurrentScreen('progress')} />;
+        return <WeeklyReportScreen onBack={back} />;
       case 'exercise':
         return (
           <ExerciseLogScreen
-            onBack={() => setCurrentScreen('home')}
-            onOpenAdd={() => setShowAddExercise(true)}
-            onOpenSettings={() => setCurrentScreen('health_sync')}
+            onBack={back}
+            onOpenAdd={() => setSheet('add_exercise')}
+            onOpenSettings={() => push('health_sync')}
           />
         );
       case 'health_sync':
-        return <HealthSyncSettingsScreen onBack={() => setCurrentScreen('exercise')} />;
+        return <HealthSyncSettingsScreen onBack={back} />;
       case 'streak_detail':
-        return <StreakDetailScreen onBack={() => setCurrentScreen('home')} />;
+        return <StreakDetailScreen onBack={back} />;
       case 'achievements':
-        return <AchievementsScreen onBack={() => setCurrentScreen('profile')} />;
+        return <AchievementsScreen onBack={back} />;
       case 'notification_settings':
-        return <NotificationSettingsScreen onBack={() => setCurrentScreen('profile')} />;
+        return <NotificationSettingsScreen onBack={back} />;
       case 'widgets_preview':
-        return <WidgetsAndWatchScreen onBack={() => setCurrentScreen('profile')} />;
+        return <WidgetsAndWatchScreen onBack={back} />;
       case 'edit_goals':
-        return <EditGoalsScreen onBack={() => setCurrentScreen('profile')} />;
+        return <EditGoalsScreen onBack={back} />;
       case 'referral':
-        return <ReferralScreen onBack={() => setCurrentScreen('profile')} />;
+        return <ReferralScreen onBack={back} />;
       case 'profile':
-        return (
-          <ProfileScreen
-            onBack={() => setCurrentScreen('home')}
-            onNavigate={(screen) => setCurrentScreen(screen as ScreenId)}
-          />
-        );
-      default:
-        return (
-          <HomeScreen
-            onOpenScan={() => setShowLogMenu(true)}
-            onOpenProgress={() => setCurrentScreen('progress')}
-            onOpenProfile={() => setCurrentScreen('profile')}
-            onOpenNutritionDetail={() => setCurrentScreen('nutrition_detail')}
-            onOpenStreak={() => setCurrentScreen('streak_detail')}
-            onOpenExercise={() => setCurrentScreen('exercise')}
-            onSelectFood={(food) => {
-              setSelectedDetailFood(food);
-              setCurrentScreen('food_detail');
-            }}
-          />
-        );
+        return <ProfileScreen onBack={() => reset('home')} onNavigate={(screen) => push(screen as ScreenId)} />;
     }
   };
 
-  const showBottomTabBar = ['home', 'progress', 'profile', 'saved_meals', 'food_search'].includes(currentScreen);
+  const renderSheet = () => {
+    switch (sheet) {
+      case 'log':
+        return (
+          <LogMenuSheet
+            onSelectCamera={openCamera}
+            onSelectText={() => setSheet('text')}
+            onSelectVoice={() => setSheet('voice')}
+            onSelectSearch={() => {
+              setSheet(null);
+              push('food_search');
+            }}
+            onSelectSaved={() => {
+              setSheet(null);
+              push('saved_meals');
+            }}
+            onSelectRecipe={() => {
+              setSheet(null);
+              push('recipe_import');
+            }}
+            onSelectQuickAdd={() => setSheet('quick_add')}
+            onClose={() => setSheet(null)}
+          />
+        );
+      case 'text':
+        return <TextLogSheet onResult={showResult} onClose={() => setSheet(null)} />;
+      case 'voice':
+        return <VoiceLogSheet onResult={showResult} onClose={() => setSheet(null)} />;
+      case 'quick_add':
+        return <QuickAddSheet onSave={addFoodLog} onClose={() => setSheet(null)} />;
+      case 'add_exercise':
+        return (
+          <AddExerciseSheet
+            onAdd={(ex) => {
+              addExercise(ex);
+              triggerHaptic('success');
+            }}
+            onClose={() => setSheet(null)}
+          />
+        );
+      case 'fix_result':
+        return analyzedFood ? (
+          <FixResultSheet foodItem={analyzedFood} onRefine={setAnalyzedFood} onClose={() => setSheet(null)} />
+        ) : null;
+      default:
+        return null;
+    }
+  };
+
+  const immersive = IMMERSIVE.includes(currentScreen);
+  const showBottomTabBar = ([...TAB_ROUTES, 'saved_meals'] as ScreenId[]).includes(currentScreen);
+
+  const renderTab = (screen: ScreenId, Icon: typeof Home, label: string) => (
+    <TouchableOpacity
+      onPress={() => {
+        triggerHaptic('light');
+        reset(screen);
+      }}
+      style={styles.tabBtn}
+    >
+      <Icon size={22} color={currentScreen === screen ? theme.accent : theme.textTertiary} />
+      <Text style={[styles.tabLabel, { color: currentScreen === screen ? theme.accent : theme.textTertiary }]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['top', 'left', 'right']}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.bg }]}
+      edges={immersive ? [] : ['top', 'left', 'right', 'bottom']}
+    >
       <StatusBar barStyle={themeMode === 'dark' ? 'light-content' : 'dark-content'} />
 
       {/* Floating Developer Screen Jumper Button */}
-      <TouchableOpacity
-        onPress={() => setShowScreenJumper(true)}
-        style={[styles.floatingJumper, { backgroundColor: theme.accent }]}
-      >
-        <Layers size={18} color={theme.accentFg} />
-        <Text style={{ fontSize: 11, fontWeight: '800', color: theme.accentFg, marginLeft: 4 }}>Xem 48 màn</Text>
-      </TouchableOpacity>
+      {__DEV__ && (
+        <TouchableOpacity
+          onPress={() => setShowScreenJumper(true)}
+          style={[styles.floatingJumper, { backgroundColor: theme.accent }]}
+        >
+          <Layers size={18} color={theme.accentFg} />
+          <Text style={{ fontSize: 11, fontWeight: '800', color: theme.accentFg, marginLeft: 4 }}>Xem 48 màn</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Screen Render */}
       <View style={{ flex: 1 }}>{renderActiveScreen()}</View>
@@ -326,38 +467,15 @@ function MainApp() {
       {/* Bottom Tab Bar */}
       {showBottomTabBar && (
         <View style={[styles.tabBar, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <TouchableOpacity
-            onPress={() => {
-              triggerHaptic('light');
-              setCurrentScreen('home');
-            }}
-            style={styles.tabBtn}
-          >
-            <Home size={22} color={currentScreen === 'home' ? theme.accent : theme.textTertiary} />
-            <Text style={[styles.tabLabel, { color: currentScreen === 'home' ? theme.accent : theme.textTertiary }]}>
-              Trang chủ
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => {
-              triggerHaptic('light');
-              setCurrentScreen('progress');
-            }}
-            style={styles.tabBtn}
-          >
-            <TrendingUp size={22} color={currentScreen === 'progress' ? theme.accent : theme.textTertiary} />
-            <Text style={[styles.tabLabel, { color: currentScreen === 'progress' ? theme.accent : theme.textTertiary }]}>
-              Tiến trình
-            </Text>
-          </TouchableOpacity>
+          {renderTab('home', Home, 'Trang chủ')}
+          {renderTab('progress', TrendingUp, 'Tiến trình')}
 
           {/* Floating Center Plus Action Button */}
           <View style={{ flex: 1, alignItems: 'center' }}>
             <TouchableOpacity
               onPress={() => {
                 triggerHaptic('heavy');
-                setShowLogMenu(true);
+                setSheet('log');
               }}
               style={[styles.centerPlus, { backgroundColor: theme.accent }]}
             >
@@ -365,141 +483,23 @@ function MainApp() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            onPress={() => {
-              triggerHaptic('light');
-              setCurrentScreen('food_search');
-            }}
-            style={styles.tabBtn}
-          >
-            <Sparkles size={22} color={currentScreen === 'food_search' ? theme.accent : theme.textTertiary} />
-            <Text style={[styles.tabLabel, { color: currentScreen === 'food_search' ? theme.accent : theme.textTertiary }]}>
-              Thư viện
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => {
-              triggerHaptic('light');
-              setCurrentScreen('profile');
-            }}
-            style={styles.tabBtn}
-          >
-            <User size={22} color={currentScreen === 'profile' ? theme.accent : theme.textTertiary} />
-            <Text style={[styles.tabLabel, { color: currentScreen === 'profile' ? theme.accent : theme.textTertiary }]}>
-              Cá nhân
-            </Text>
-          </TouchableOpacity>
+          {renderTab('food_search', Sparkles, 'Thư viện')}
+          {renderTab('profile', User, 'Cá nhân')}
         </View>
       )}
 
-      {/* 2.1 Log Menu Modal */}
-      <Modal visible={showLogMenu} animationType="slide" transparent>
-        <View style={styles.modalBackdrop}>
-          <LogMenuSheet
-            onSelectCamera={(mode) => {
-              setShowLogMenu(false);
-              setCameraMode(mode);
-              setShowCamera(true);
-            }}
-            onSelectText={() => {
-              setShowLogMenu(false);
-              setShowTextLog(true);
-            }}
-            onSelectVoice={() => {
-              setShowLogMenu(false);
-              setShowVoiceLog(true);
-            }}
-            onSelectSearch={() => {
-              setShowLogMenu(false);
-              setCurrentScreen('food_search');
-            }}
-            onSelectSaved={() => {
-              setShowLogMenu(false);
-              setCurrentScreen('saved_meals');
-            }}
-            onSelectRecipe={() => {
-              setShowLogMenu(false);
-              setCurrentScreen('recipe_import');
-            }}
-            onSelectQuickAdd={() => {
-              setShowLogMenu(false);
-              setShowQuickAdd(true);
-            }}
-            onClose={() => setShowLogMenu(false)}
-          />
-        </View>
+      {/* Bottom sheets — one Modal, swapped content: avoids the iOS modal-over-modal race. */}
+      <Modal
+        visible={sheet !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSheet(null)}
+      >
+        <View style={styles.modalBackdrop}>{renderSheet()}</View>
       </Modal>
-
-      {/* 2.6 Text Log Sheet Modal */}
-      <Modal visible={showTextLog} animationType="slide" transparent>
-        <View style={styles.modalBackdrop}>
-          <TextLogSheet
-            onResult={(food) => {
-              setShowTextLog(false);
-              setAnalyzedFood(food);
-            }}
-            onClose={() => setShowTextLog(false)}
-          />
-        </View>
-      </Modal>
-
-      {/* 2.7 Voice Log Sheet Modal */}
-      <Modal visible={showVoiceLog} animationType="slide" transparent>
-        <View style={styles.modalBackdrop}>
-          <VoiceLogSheet
-            onResult={(food) => {
-              setShowVoiceLog(false);
-              setAnalyzedFood(food);
-            }}
-            onClose={() => setShowVoiceLog(false)}
-          />
-        </View>
-      </Modal>
-
-      {/* 2.13 Quick Add Sheet Modal */}
-      <Modal visible={showQuickAdd} animationType="slide" transparent>
-        <View style={styles.modalBackdrop}>
-          <QuickAddSheet
-            onSave={(food) => addFoodLog(food)}
-            onClose={() => setShowQuickAdd(false)}
-          />
-        </View>
-      </Modal>
-
-      {/* 5.2 Add Exercise Sheet Modal */}
-      <Modal visible={showAddExercise} animationType="slide" transparent>
-        <View style={styles.modalBackdrop}>
-          <AddExerciseSheet
-            onAdd={(ex) => {
-              triggerHaptic('success');
-            }}
-            onClose={() => setShowAddExercise(false)}
-          />
-        </View>
-      </Modal>
-
-      {/* 2.2 Camera Full Screen Modal */}
-      <Modal visible={showCamera} animationType="slide" presentationStyle="fullScreen">
-        <CameraScanScreen
-          onCapture={handleCapturePhoto}
-          onClose={() => setShowCamera(false)}
-        />
-      </Modal>
-
-      {/* 2.4 Food Result Screen Modal */}
-      {analyzedFood && (
-        <Modal visible={true} animationType="slide" presentationStyle="fullScreen">
-          <FoodResultScreen
-            foodItem={analyzedFood}
-            onSave={handleSaveAnalyzedFood}
-            onClose={() => setAnalyzedFood(null)}
-          />
-        </Modal>
-      )}
 
       {/* Screen Jumper / Selector Modal */}
-      <Modal visible={showScreenJumper} animationType="fade" transparent>
+      <Modal visible={showScreenJumper} animationType="fade" transparent onRequestClose={() => setShowScreenJumper(false)}>
         <View style={styles.modalBackdrop}>
           <View style={[styles.jumperModal, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -541,7 +541,7 @@ function MainApp() {
                   key={s.id}
                   onPress={() => {
                     triggerHaptic('light');
-                    setCurrentScreen(s.id as ScreenId);
+                    push(s.id as ScreenId);
                     setShowScreenJumper(false);
                   }}
                   style={[
@@ -577,6 +577,7 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   floatingJumper: {
     position: 'absolute',
     top: 50,
