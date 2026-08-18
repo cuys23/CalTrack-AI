@@ -21,6 +21,7 @@ import { FoodDetailScreen, CreateFoodScreen, SavedMealsScreen, RecipeImportScree
 import { NotificationSettingsScreen, WidgetsAndWatchScreen, EditGoalsScreen } from './src/screens/gamification/WidgetsAndSettingsScreens';
 
 import { AiFoodEngine, FKB_DATABASE } from './src/services/aiFoodEngine';
+import { apiClient } from './src/services/apiClient';
 import { FoodItem } from './src/types';
 import { triggerHaptic } from './src/utils/haptics';
 
@@ -76,7 +77,39 @@ function MainApp() {
     if (isBarcode || cameraMode === 'barcode') {
       item = await AiFoodEngine.scanBarcode('8934563128901');
     } else {
-      item = await AiFoodEngine.analyzeImage(imageUri);
+      try {
+        // Attempt backend AI Vision Pipeline
+        const res = await apiClient.analyzeMeal(imageUri, 'breakfast');
+        if (res?.meal_log?.foods && res.meal_log.foods.length > 0) {
+          const first = res.meal_log.foods[0];
+          item = {
+            id: String(res.meal_log.id || Date.now()),
+            name: first.name,
+            mealType: (res.meal_log.meal_type as any) || 'breakfast',
+            time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+            date: new Date().toISOString().split('T')[0],
+            calories: first.calories,
+            portion: 1,
+            portionUnit: 'phần',
+            portionGrams: first.grams,
+            macros: {
+              protein: first.protein_g,
+              carbs: first.carbs_g,
+              fat: first.fat_g,
+            },
+            healthScore: Math.min(10, Math.max(1, Math.round((res.meal_log.health_score || 88) / 10))),
+            confidence: 'high',
+            source: 'verified',
+            fkbSourceLabel: 'AI Vision Server',
+            imageUrl: res.meal_log.image_url || imageUri,
+          };
+        } else {
+          item = await AiFoodEngine.analyzeImage(imageUri);
+        }
+      } catch {
+        // Offline heuristic fallback
+        item = await AiFoodEngine.analyzeImage(imageUri);
+      }
     }
     setAnalyzedFood(item);
   };

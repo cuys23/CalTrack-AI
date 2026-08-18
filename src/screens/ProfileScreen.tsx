@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Image, Alert } from 'react-native';
 import {
   ChevronLeft,
@@ -24,6 +24,9 @@ import {
 import { useApp } from '../context/AppContext';
 import { triggerHaptic } from '../utils/haptics';
 
+import { AuthModal } from '../components/AuthModal';
+import { apiClient } from '../services/apiClient';
+
 interface ProfileScreenProps {
   onBack: () => void;
   onNavigate?: (screen: string) => void;
@@ -31,6 +34,7 @@ interface ProfileScreenProps {
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onNavigate }) => {
   const { theme, themeMode, setThemeMode, userProfile, userGoals, showToast } = useApp();
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   const handleNav = (screen: string) => {
     triggerHaptic('light');
@@ -44,22 +48,50 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onNavigate
     showToast('Đã xuất dữ liệu nhật ký CalTrack (CSV) thành công!');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     triggerHaptic('medium');
-    showToast('Đã đăng xuất tài khoản!');
+    try {
+      await apiClient.logout();
+      showToast('Đã đăng xuất tài khoản thành công!');
+    } catch (e) {
+      showToast('Đã đăng xuất.');
+    }
+  };
+
+  const handleRestorePurchases = async () => {
+    triggerHaptic('light');
+    try {
+      const res = await apiClient.restoreIapPurchases([]);
+      if (res.is_premium) {
+        triggerHaptic('success');
+        showToast('Khôi phục gói mua thành công!');
+      } else {
+        showToast('Không tìm thấy giao dịch nào để khôi phục.');
+      }
+    } catch (e) {
+      showToast('Không tìm thấy giao dịch nào để khôi phục.');
+    }
   };
 
   const handleDeleteAccount = () => {
     triggerHaptic('heavy');
     Alert.alert(
       'Xóa tài khoản',
-      'Bạn có chắc chắn muốn xóa toàn bộ dữ liệu tài khoản? Hành động này không thể hoàn tác.',
+      'Bạn có chắc chắn muốn xóa toàn bộ dữ liệu tài khoản? Hành động này tuân theo quy định Apple App Store (Guideline 5.1.1) và không thể hoàn tác.',
       [
         { text: 'Hủy', style: 'cancel' },
         {
           text: 'Xóa vĩnh viễn',
           style: 'destructive',
-          onPress: () => showToast('Tài khoản đã được xóa theo yêu cầu.')
+          onPress: async () => {
+            try {
+              await apiClient.deleteAccount();
+              triggerHaptic('success');
+              showToast('Tài khoản và dữ liệu đã được xóa hoàn toàn.');
+            } catch (e: any) {
+              showToast(e.message || 'Lỗi khi xóa tài khoản.', 'error');
+            }
+          }
         }
       ]
     );
@@ -265,6 +297,26 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onNavigate
       {/* 7. Hỗ trợ, Pháp lý & Tài khoản */}
       <Text style={[styles.sectionHeading, { color: theme.textSecondary, marginTop: 14 }]}>HỆ THỐNG & PHÁP LÝ</Text>
       <View style={[styles.menuGroup, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <TouchableOpacity onPress={() => setShowAuthModal(true)} style={styles.menuItem}>
+          <View style={styles.menuLeft}>
+            <Sparkles size={19} color="#10B981" />
+            <Text style={[styles.menuTitle, { color: theme.text, marginLeft: 12 }]}>Đăng nhập / Đồng bộ Cloud</Text>
+          </View>
+          <ChevronRight size={18} color={theme.textTertiary} />
+        </TouchableOpacity>
+
+        <View style={[styles.divider, { backgroundColor: theme.border }]} />
+
+        <TouchableOpacity onPress={handleRestorePurchases} style={styles.menuItem}>
+          <View style={styles.menuLeft}>
+            <Shield size={19} color={theme.textSecondary} />
+            <Text style={[styles.menuTitle, { color: theme.text, marginLeft: 12 }]}>Khôi phục gói mua (Restore Purchases)</Text>
+          </View>
+          <ChevronRight size={18} color={theme.textTertiary} />
+        </TouchableOpacity>
+
+        <View style={[styles.divider, { backgroundColor: theme.border }]} />
+
         <TouchableOpacity onPress={handleLogout} style={styles.menuItem}>
           <View style={styles.menuLeft}>
             <LogOut size={19} color={theme.textSecondary} />
@@ -287,6 +339,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onNavigate
         <Text style={{ fontSize: 12, fontWeight: '700', color: theme.textTertiary }}>CalTrack AI • v1.0.0 (Build 24)</Text>
         <Text style={{ fontSize: 11, color: theme.textTertiary, marginTop: 2 }}>Thiết kế theo chuẩn Apple Human Interface Guidelines</Text>
       </View>
+
+      <AuthModal
+        visible={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+      />
     </ScrollView>
   );
 };
