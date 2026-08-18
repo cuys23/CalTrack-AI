@@ -1,0 +1,40 @@
+{
+  "cli": {
+    "version": ">= 14.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": false
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "ios": {
+        "bundleIdentifier": "com.caltrack.app"
+      },
+      "android": {
+        "buildType": "app-bundle",
+        "package": "com.caltrack.app"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "apple-developer@caltrack.ai",
+        "ascAppId": "6470000000",
+        "appleTeamId": "TEAMID1234"
+      }
+    }
+  }
+}

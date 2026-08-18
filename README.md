@@ -1,54 +1,84 @@
-# CalTrack AI — Ứng dụng Di Động Expo React Native
+# CalTrack AI — Production Mobile App & Backend
 
-Ứng dụng đếm calo, nhận diện món ăn bằng Camera AI và theo dõi dinh dưỡng được xây dựng hoàn chỉnh trên nền tảng **Expo (React Native + TypeScript)** theo tài liệu thiết kế giao diện chuẩn iOS.
+Hệ sinh thái ứng dụng theo dõi dinh dưỡng, đếm calo, nhận diện món ăn bằng Camera AI và quản trị Subscription (Apple IAP) chuẩn **iOS App Store**.
 
 ---
 
-## 🚀 Hướng dẫn khởi chạy & Trải nghiệm
+## 🏗️ Kiến Trúc Hệ Thống (Server-Centric Architecture)
 
-### 1. Khởi động Expo Development Server
-Mở terminal trong thư mục dự án:
+- **Frontend Mobile:** Expo SDK 57 (React Native 0.86 + React 19 + TypeScript)
+- **Backend Production:** Laravel 12 + PostgreSQL 17 + Redis 7 + Nginx + Docker
+- **AI Vision Engine:** Google Gemini 2.5/3.0 & OpenAI GPT-4o Vision
+- **In-App Purchases:** Apple StoreKit 2 & Server Notifications V2 Webhook
+- **Offline First:** Local Storage caching & background sync khi có kết nối mạng
+
+---
+
+## 🚀 Hướng Dẫn Khởi Chạy
+
+### 1. Khởi động Backend (Docker hoặc Local)
+
+**Cách 1: Chạy bằng Docker Compose (Khuyên dùng):**
 ```bash
-cd /Users/pc/.gemini/antigravity-ide/scratch/caltrack-expo
+cd backend
+cp .env.example .env
+docker compose up -d
+```
+
+**Cách 2: Chạy trực tiếp trên máy phát triển:**
+```bash
+cd backend
+composer install
+php artisan migrate --seed
+php artisan serve --port=8000
+```
+> Trang Admin Portal có sẵn tại: `http://localhost:8000/admin`
+
+---
+
+### 2. Khởi động Frontend Expo Mobile App
+
+```bash
+# Cài đặt dependencies
+npm install
+
+# Khởi động Expo Development Server
 npx expo start
 ```
-
-### 2. Trải nghiệm trên thiết bị thật (iPhone / Android)
-- Cài đặt ứng dụng **Expo Go** từ App Store (iOS) hoặc Google Play Store (Android).
-- Mở ứng dụng Camera trên điện thoại và quét mã **QR Code** hiển thị trên terminal để mở ngay ứng dụng trên điện thoại thật với đầy đủ:
-  - Máy ảnh thực tế (`expo-camera`)
-  - Rung phản hồi chân thực (**Taptic Engine** qua `expo-haptics`)
-  - Vòng Calo & Macro SVG mượt mà (`react-native-svg`)
-  - Lưu trữ dữ liệu vĩnh viễn trên máy (`@react-native-async-storage/async-storage`)
+Quét mã QR bằng ứng dụng **Expo Go** trên iPhone hoặc thiết bị Android để trải nghiệm.
 
 ---
 
-## 📁 Cấu trúc thư mục dự án
+## 📁 Cấu Trúc Dự Án
 
-```
+```text
 caltrack-expo/
-├── App.tsx                     # Điểm khởi chạy chính & Navigation Stack
-├── app.json                    # Cấu hình quyền Camera, biểu tượng và Splash
-├── src/
-│   ├── components/
-│   │   ├── CalorieRing.tsx     # Vòng tròn Calo & Macro (react-native-svg)
-│   │   ├── FoodCard.tsx        # Thẻ món ăn & dải ngày DateStrip
-│   │   ├── RulerPicker.tsx     # Thước đo cuộn tương tác kèm Haptic
-│   │   └── HealthScoreGauge.tsx# Thang đo điểm Healthy AI
-│   ├── constants/
-│   │   └── theme.ts            # Bảng màu Light / Dark Mode chuẩn token
-│   ├── context/
-│   │   └── AppContext.tsx      # Quản lý State & AsyncStorage
-│   ├── screens/
-│   │   ├── HomeScreen.tsx      # Trang chủ Dashboard & 4 bữa ăn
-│   │   ├── CameraScanScreen.tsx# Camera quét món ăn, mã vạch & tải ảnh
-│   │   ├── FoodResultScreen.tsx# Màn hình kết quả phân tích AI 280px
-│   │   ├── ProgressScreen.tsx  # Tiến trình, biểu đồ cân nặng & số đo
-│   │   └── OnboardingScreen.tsx# Quy trình khảo sát tính BMR & mục tiêu
-│   ├── services/
-│   │   └── aiFoodEngine.ts     # Động cơ AI Vision & Kho dữ liệu món ăn
-│   ├── types/
-│   │   └── index.ts            # TypeScript interfaces
-│   └── utils/
-│       └── haptics.ts          # Module rung native expo-haptics
+├── backend/                    # Laravel 12 Production Backend
+│   ├── app/
+│   │   ├── Http/Controllers/   # Auth, Meal, IAP, Goals, Weight, Admin
+│   │   ├── Services/           # AiVision, TDEE, IAP JWS, NutritionValidator
+│   │   ├── Jobs/               # AnalyzeMealJob (Redis Queue)
+│   │   └── Models/             # User, MealLog, Food, Subscription, DailyGoal
+│   ├── routes/                 # api.php, web.php
+│   └── docker-compose.yml      # App, PostgreSQL, Redis, Nginx, Queue-Worker
+├── docs/                       # Tài liệu thiết kế & kỹ thuật
+│   ├── PROGRESS.md             # Bảng theo dõi tiến độ từng Wave
+│   ├── API.md                  # Tài liệu đặc tả RESTful API
+│   └── PROMPT_AI_VISION.md     # Prompt chuẩn và Schema JSON cho AI
+├── src/                        # Mã nguồn ứng dụng Expo Mobile
+│   ├── components/             # CalorieRing, FoodCard, RulerPicker, v.v.
+│   ├── constants/              # Theme tokens (Light/Dark Mode)
+│   ├── context/                # AppContext & State Management
+│   ├── screens/                # Home, CameraScan, FoodResult, Progress, Onboarding
+│   └── services/               # apiClient.ts, aiFoodEngine.ts
+├── App.tsx                     # Entrypoint & Navigation Stack
+├── app.json                    # Cấu hình quyền iOS/Android & Bundle ID
+└── eas.json                    # Cấu hình EAS Build & TestFlight
 ```
+
+---
+
+## 📖 Tài Liệu Tham Khảo
+* [docs/PROGRESS.md](docs/PROGRESS.md) — Theo dõi tiến độ Wave 0 đến Wave 6
+* [docs/API.md](docs/API.md) — Đặc tả API Endpoints & Request/Response
+* [docs/PROMPT_AI_VISION.md](docs/PROMPT_AI_VISION.md) — AI Vision System Prompt & Schema

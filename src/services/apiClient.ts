@@ -1,6 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000/api';
+const TOKEN_KEY = 'caltrack_auth_token';
 
 class ApiClient {
   private token: string | null = null;
@@ -11,24 +14,43 @@ class ApiClient {
 
   private async initToken() {
     try {
-      this.token = await AsyncStorage.getItem('@caltrack_auth_token');
+      if (Platform.OS === 'web') {
+        this.token = await AsyncStorage.getItem(`@${TOKEN_KEY}`);
+      } else {
+        this.token = await SecureStore.getItemAsync(TOKEN_KEY);
+      }
     } catch (e) {
-      console.warn('Failed to load auth token from storage', e);
+      console.warn('Failed to load secure auth token', e);
+      try {
+        this.token = await AsyncStorage.getItem(`@${TOKEN_KEY}`);
+      } catch (inner) {}
     }
   }
 
   public async setToken(token: string | null) {
     this.token = token;
-    if (token) {
-      await AsyncStorage.setItem('@caltrack_auth_token', token);
-    } else {
-      await AsyncStorage.removeItem('@caltrack_auth_token');
+    try {
+      if (token) {
+        if (Platform.OS === 'web') {
+          await AsyncStorage.setItem(`@${TOKEN_KEY}`, token);
+        } else {
+          await SecureStore.setItemAsync(TOKEN_KEY, token);
+        }
+      } else {
+        if (Platform.OS === 'web') {
+          await AsyncStorage.removeItem(`@${TOKEN_KEY}`);
+        } else {
+          await SecureStore.deleteItemAsync(TOKEN_KEY);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to set secure auth token', e);
     }
   }
 
   public async getToken(): Promise<string | null> {
     if (!this.token) {
-      this.token = await AsyncStorage.getItem('@caltrack_auth_token');
+      await this.initToken();
     }
     return this.token;
   }

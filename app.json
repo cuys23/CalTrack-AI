@@ -42,7 +42,8 @@
         {
           "photosPermission": "Ứng dụng cần quyền truy cập thư viện ảnh để phân tích món ăn."
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "web": {
       "favicon": "./assets/favicon.png"
