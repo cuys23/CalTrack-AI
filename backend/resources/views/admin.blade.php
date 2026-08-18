@@ -337,7 +337,7 @@
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-800/60">
-                            @foreach($users as $u)
+                            @forelse($users as $u)
                                 <tr class="hover:bg-slate-800/30 transition-colors">
                                     <td class="py-3 px-3">
                                         <div class="flex items-center gap-2.5">
@@ -348,11 +348,11 @@
                                         </div>
                                     </td>
                                     <td class="py-3 px-3 text-slate-400 font-mono">{{ $u->email }}</td>
-                                    <td class="py-3 px-3 text-slate-300 capitalize">{{ $u->gender ?? 'male' }} ({{ $u->birthday ? \Carbon\Carbon::parse($u->birthday)->age : 28 }} tuổi)</td>
+                                    <td class="py-3 px-3 text-slate-300 capitalize">{{ $u->gender ?? 'N/A' }} ({{ $u->birthday ? \Carbon\Carbon::parse($u->birthday)->age : '—' }} tuổi)</td>
                                     <td class="py-3 px-3">
-                                        <span class="font-bold text-white">{{ $u->current_weight_kg ?? 65 }} kg</span> 
+                                        <span class="font-bold text-white">{{ $u->current_weight_kg ?? '—' }} kg</span> 
                                         <span class="text-slate-500">➜</span> 
-                                        <span class="text-emerald-400 font-semibold">{{ $u->target_weight_kg ?? 60 }} kg</span>
+                                        <span class="text-emerald-400 font-semibold">{{ $u->target_weight_kg ?? '—' }} kg</span>
                                     </td>
                                     <td class="py-3 px-3 font-mono font-bold text-amber-400">
                                         {{ $u->dailyGoal->target_calories ?? 2000 }} kcal
@@ -368,7 +368,11 @@
                                     </td>
                                     <td class="py-3 px-3 text-right text-slate-400 font-mono">{{ $u->created_at->format('d/m/Y') }}</td>
                                 </tr>
-                            @endforeach
+                            @empty
+                                <tr>
+                                    <td colspan="7" class="py-8 text-center text-slate-500">Chưa có người dùng nào đăng ký trên hệ thống.</td>
+                                </tr>
+                            @endforelse
                         </tbody>
                     </table>
                 </div>
@@ -422,7 +426,7 @@
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-800/60">
-                            @foreach($subscriptions as $sub)
+                            @forelse($subscriptions as $sub)
                                 <tr class="hover:bg-slate-800/30 transition-colors">
                                     <td class="py-3 px-3 font-bold text-slate-200">{{ $sub->user->name ?? 'Người dùng' }}</td>
                                     <td class="py-3 px-3 font-mono text-emerald-400">{{ $sub->product_id }}</td>
@@ -442,7 +446,11 @@
                                         </span>
                                     </td>
                                 </tr>
-                            @endforeach
+                            @empty
+                                <tr>
+                                    <td colspan="7" class="py-8 text-center text-slate-500">Chưa có giao dịch subscription Apple IAP nào.</td>
+                                </tr>
+                            @endforelse
                         </tbody>
                     </table>
                 </div>
