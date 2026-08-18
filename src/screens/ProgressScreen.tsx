@@ -5,7 +5,19 @@ import { useApp } from '../context/AppContext';
 import { RulerPicker } from '../components/RulerPicker';
 import { triggerHaptic } from '../utils/haptics';
 
-export const ProgressScreen: React.FC<{ onBack: () => void; onOpenCompare?: () => void }> = ({ onBack, onOpenCompare }) => {
+interface ProgressScreenProps {
+  onBack: () => void;
+  onOpenCompare?: () => void;
+  onOpenWeeklyReport?: () => void;
+  onOpenMeasurements?: () => void;
+}
+
+export const ProgressScreen: React.FC<ProgressScreenProps> = ({
+  onBack,
+  onOpenCompare,
+  onOpenWeeklyReport,
+  onOpenMeasurements,
+}) => {
   const { theme, userProfile, userGoals, weightLogs, foodLogs, addWeightLog } = useApp();
   const [showLogModal, setShowLogModal] = useState(false);
   const [inputWeight, setInputWeight] = useState(userProfile.currentWeightKg || 65.4);
@@ -94,29 +106,57 @@ export const ProgressScreen: React.FC<{ onBack: () => void; onOpenCompare?: () =
 
       {/* 4 Average Stat Boxes */}
       <View style={styles.grid2x2}>
-        <View style={[styles.statBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => {
+            triggerHaptic('light');
+            if (onOpenWeeklyReport) onOpenWeeklyReport();
+          }}
+          style={[styles.statBox, { backgroundColor: theme.surface, borderColor: theme.border }]}
+        >
           <Text style={{ fontSize: 11, color: theme.textSecondary, fontWeight: '600' }}>Calo TB / ngày</Text>
           <Text style={[styles.statNum, { color: theme.text }]}>{avgKcal} kcal</Text>
-          <Text style={{ fontSize: 10, color: theme.success, marginTop: 2 }}>Mục tiêu: {userGoals.targetCalories} kcal</Text>
-        </View>
+          <Text style={{ fontSize: 10, color: theme.success, marginTop: 2 }}>Mục tiêu: {userGoals.targetCalories} kcal ↗</Text>
+        </TouchableOpacity>
 
-        <View style={[styles.statBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => {
+            triggerHaptic('light');
+            if (onOpenWeeklyReport) onOpenWeeklyReport();
+          }}
+          style={[styles.statBox, { backgroundColor: theme.surface, borderColor: theme.border }]}
+        >
           <Text style={{ fontSize: 11, color: theme.textSecondary, fontWeight: '600' }}>Protein TB</Text>
           <Text style={[styles.statNum, { color: theme.protein }]}>{avgProtein}g</Text>
-          <Text style={{ fontSize: 10, color: theme.textSecondary, marginTop: 2 }}>Mục tiêu: {userGoals.targetProtein}g</Text>
-        </View>
+          <Text style={{ fontSize: 10, color: theme.textSecondary, marginTop: 2 }}>Mục tiêu: {userGoals.targetProtein}g ↗</Text>
+        </TouchableOpacity>
 
-        <View style={[styles.statBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => {
+            triggerHaptic('light');
+            if (onOpenWeeklyReport) onOpenWeeklyReport();
+          }}
+          style={[styles.statBox, { backgroundColor: theme.surface, borderColor: theme.border }]}
+        >
           <Text style={{ fontSize: 11, color: theme.textSecondary, fontWeight: '600' }}>Tổng số bữa đã ghi</Text>
           <Text style={[styles.statNum, { color: theme.text }]}>{userProfile.totalLoggedMeals || (foodLogs || []).length} bữa</Text>
           <Text style={{ fontSize: 10, color: theme.textSecondary, marginTop: 2 }}>{userProfile.appDaysCount || 24} ngày dùng app</Text>
-        </View>
+        </TouchableOpacity>
 
-        <View style={[styles.statBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => {
+            triggerHaptic('light');
+            if (onOpenWeeklyReport) onOpenWeeklyReport();
+          }}
+          style={[styles.statBox, { backgroundColor: theme.surface, borderColor: theme.border }]}
+        >
           <Text style={{ fontSize: 11, color: theme.textSecondary, fontWeight: '600' }}>Streak dài nhất</Text>
           <Text style={[styles.statNum, { color: theme.streak }]}>🔥 {userProfile.longestStreak} ngày</Text>
           <Text style={{ fontSize: 10, color: theme.textSecondary, marginTop: 2 }}>Hiện tại: {userProfile.streakCount} ngày</Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* Weight History Timeline */}

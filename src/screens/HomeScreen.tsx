@@ -11,9 +11,21 @@ interface HomeScreenProps {
   onOpenScan: () => void;
   onOpenProgress: () => void;
   onOpenProfile: () => void;
+  onOpenNutritionDetail?: () => void;
+  onOpenStreak?: () => void;
+  onOpenExercise?: () => void;
+  onSelectFood?: (food: any) => void;
 }
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenScan, onOpenProgress, onOpenProfile }) => {
+export const HomeScreen: React.FC<HomeScreenProps> = ({
+  onOpenScan,
+  onOpenProgress,
+  onOpenProfile,
+  onOpenNutritionDetail,
+  onOpenStreak,
+  onOpenExercise,
+  onSelectFood
+}) => {
   const { theme, userProfile, userGoals, foodLogs, selectedDate, exercises } = useApp();
 
   const todayFoodLogs = (foodLogs || []).filter((f) => f && f.date === selectedDate);
@@ -45,10 +57,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenScan, onOpenProgre
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           {/* Flame Streak Chip */}
-          <View style={[styles.streakChip, { backgroundColor: 'rgba(255, 107, 53, 0.14)', borderColor: 'rgba(255, 107, 53, 0.3)' }]}>
+          <TouchableOpacity
+            onPress={() => {
+              triggerHaptic('light');
+              if (onOpenStreak) onOpenStreak();
+            }}
+            style={[styles.streakChip, { backgroundColor: 'rgba(255, 107, 53, 0.14)', borderColor: 'rgba(255, 107, 53, 0.3)' }]}
+          >
             <Flame size={16} color={theme.streak} />
             <Text style={{ color: theme.streak, fontWeight: '800', fontSize: 13 }}>{userProfile.streakCount}</Text>
-          </View>
+          </TouchableOpacity>
 
           {/* Avatar */}
           <TouchableOpacity onPress={onOpenProfile} style={[styles.avatar, { borderColor: theme.border }]}>
@@ -61,7 +79,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenScan, onOpenProgre
       <DateStrip />
 
       {/* 3. Main Calorie Card */}
-      <View style={[styles.calorieCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => {
+          triggerHaptic('light');
+          if (onOpenNutritionDetail) onOpenNutritionDetail();
+        }}
+        style={[styles.calorieCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
+      >
         <CalorieRing
           size={140}
           target={userGoals.targetCalories}
@@ -80,19 +105,30 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenScan, onOpenProgre
             Đã đốt: +{totalBurned} kcal
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
 
       {/* 4. 3 Macro Rings Card */}
-      <View style={[styles.macroRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => {
+          triggerHaptic('light');
+          if (onOpenNutritionDetail) onOpenNutritionDetail();
+        }}
+        style={[styles.macroRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
+      >
         <MacroRing type="protein" target={userGoals.targetProtein} consumed={totalProtein} size={48} />
         <MacroRing type="carbs" target={userGoals.targetCarbs} consumed={totalCarbs} size={48} />
         <MacroRing type="fat" target={userGoals.targetFat} consumed={totalFat} size={48} />
-      </View>
+      </TouchableOpacity>
 
       {/* 5. Health & Steps Card */}
       <TouchableOpacity
         activeOpacity={0.8}
-        onPress={onOpenProgress}
+        onPress={() => {
+          triggerHaptic('light');
+          if (onOpenExercise) onOpenExercise();
+          else onOpenProgress();
+        }}
         style={[styles.stepsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -131,7 +167,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenScan, onOpenProgre
             </View>
 
             {items.length > 0 ? (
-              items.map((food, idx) => <FoodCard key={food.id || `food-${idx}`} food={food} />)
+              items.map((food, idx) => (
+                <FoodCard
+                  key={food.id || `food-${idx}`}
+                  food={food}
+                  onPress={() => {
+                    if (onSelectFood) onSelectFood(food);
+                  }}
+                />
+              ))
             ) : (
               <TouchableOpacity
                 activeOpacity={0.7}

@@ -138,6 +138,13 @@ function MainApp() {
             onOpenScan={() => setShowLogMenu(true)}
             onOpenProgress={() => setCurrentScreen('progress')}
             onOpenProfile={() => setCurrentScreen('profile')}
+            onOpenNutritionDetail={() => setCurrentScreen('nutrition_detail')}
+            onOpenStreak={() => setCurrentScreen('streak_detail')}
+            onOpenExercise={() => setCurrentScreen('exercise')}
+            onSelectFood={(food) => {
+              setSelectedDetailFood(food);
+              setCurrentScreen('food_detail');
+            }}
           />
         );
       case 'nutrition_detail':
@@ -145,39 +152,63 @@ function MainApp() {
       case 'food_search':
         return (
           <FoodSearchScreen
-            onSelectFood={(food) => setAnalyzedFood(food)}
+            onSelectFood={(food) => {
+              setSelectedDetailFood(food);
+              setCurrentScreen('food_detail');
+            }}
             onBack={() => setCurrentScreen('home')}
           />
         );
       case 'food_detail':
         return (
           <FoodDetailScreen
-            food={selectedDetailFood || foodLogs[0]}
+            food={selectedDetailFood || (foodLogs.length > 0 ? foodLogs[0] : {
+              id: 'sample-food',
+              name: 'Món ăn mẫu',
+              mealType: 'lunch',
+              time: '12:00',
+              date: new Date().toISOString().split('T')[0],
+              calories: 450,
+              portion: 1,
+              portionUnit: 'phần',
+              macros: { protein: 24, carbs: 48, fat: 12 },
+              healthScore: 8,
+              confidence: 'high'
+            })}
             onSave={() => {
               if (selectedDetailFood) addFoodLog(selectedDetailFood);
               setCurrentScreen('home');
             }}
-            onBack={() => setCurrentScreen('food_search')}
+            onBack={() => setCurrentScreen('home')}
           />
         );
       case 'create_food':
         return (
           <CreateFoodScreen
-            onCreated={(food) => addFoodLog(food)}
+            onCreated={(food) => {
+              addFoodLog(food);
+              setCurrentScreen('home');
+            }}
             onBack={() => setCurrentScreen('home')}
           />
         );
       case 'saved_meals':
         return (
           <SavedMealsScreen
-            onSelectFood={(food) => setAnalyzedFood(food)}
+            onSelectFood={(food) => {
+              setSelectedDetailFood(food);
+              setCurrentScreen('food_detail');
+            }}
             onBack={() => setCurrentScreen('home')}
           />
         );
       case 'recipe_import':
         return (
           <RecipeImportScreen
-            onImported={(food) => addFoodLog(food)}
+            onImported={(food) => {
+              addFoodLog(food);
+              setCurrentScreen('home');
+            }}
             onBack={() => setCurrentScreen('home')}
           />
         );
@@ -186,6 +217,8 @@ function MainApp() {
           <ProgressScreen
             onBack={() => setCurrentScreen('home')}
             onOpenCompare={() => setCurrentScreen('photo_compare')}
+            onOpenWeeklyReport={() => setCurrentScreen('weekly_report')}
+            onOpenMeasurements={() => setCurrentScreen('measurement_log')}
           />
         );
       case 'measurement_log':
@@ -224,11 +257,24 @@ function MainApp() {
           />
         );
       default:
-        return <HomeScreen onOpenScan={() => setShowLogMenu(true)} onOpenProgress={() => setCurrentScreen('progress')} onOpenProfile={() => setCurrentScreen('profile')} />;
+        return (
+          <HomeScreen
+            onOpenScan={() => setShowLogMenu(true)}
+            onOpenProgress={() => setCurrentScreen('progress')}
+            onOpenProfile={() => setCurrentScreen('profile')}
+            onOpenNutritionDetail={() => setCurrentScreen('nutrition_detail')}
+            onOpenStreak={() => setCurrentScreen('streak_detail')}
+            onOpenExercise={() => setCurrentScreen('exercise')}
+            onSelectFood={(food) => {
+              setSelectedDetailFood(food);
+              setCurrentScreen('food_detail');
+            }}
+          />
+        );
     }
   };
 
-  const showBottomTabBar = ['home', 'progress', 'profile', 'saved_meals'].includes(currentScreen);
+  const showBottomTabBar = ['home', 'progress', 'profile', 'saved_meals', 'food_search'].includes(currentScreen);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]} edges={['top', 'left', 'right']}>
