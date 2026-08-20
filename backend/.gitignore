@@ -25,3 +25,8 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Filament ships these; regenerate on deploy with `php artisan filament:assets`
+/public/css/filament
+/public/js/filament
+/public/fonts/filament

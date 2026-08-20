@@ -15,7 +15,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'check.premium' => \App\Http\Middleware\CheckPremium::class,
+            'admin' => \App\Http\Middleware\EnsureUserIsAdmin::class,
         ]);
+
+        // The only login form in this app is the Filament panel's.
+        $middleware->redirectGuestsTo('/admin/login');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

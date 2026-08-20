@@ -17,6 +17,7 @@ class ExampleTest extends TestCase
     {
         $response = $this->get('/');
 
-        $response->assertStatus(200);
+        // The bare domain is an API host; the only thing to look at is the panel.
+        $response->assertRedirect('/admin');
     }
 }
