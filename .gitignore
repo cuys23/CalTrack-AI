@@ -30,6 +30,8 @@ yarn-error.*
 # macOS
 .DS_Store
 *.pem
+# Apple's public root certificate is pinned by the IAP verifier and must ship.
+!backend/resources/certs/*.pem
 
 # local env files
 .env*.local
@@ -40,3 +42,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# secrets
+.env
+google-play-key.json
