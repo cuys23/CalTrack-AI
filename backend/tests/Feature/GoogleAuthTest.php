@@ -82,7 +82,7 @@ class GoogleAuthTest extends TestCase
                 'email' => 'victim@gmail.com',
                 'email_verified' => false,
             ])),
-        ])->assertStatus(409);
+        ])->assertStatus(422);
 
         $this->assertDatabaseCount('users', 1);
         $this->assertNull($victim->fresh()->google_user_id);

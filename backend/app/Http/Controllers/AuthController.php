@@ -108,12 +108,17 @@ class AuthController extends Controller
             'name' => 'nullable|string|max:255',
         ]);
 
+        $audiences = array_values(array_filter(array_merge(
+            (array) config('services.apple.audiences', []),
+            (array) config('services.apple.client_ids', [])
+        )));
+
         try {
             $claims = $this->tokenVerifier->verify(
                 $validated['identity_token'],
-                (string) config('services.apple.jwks_url'),
-                [(string) config('services.apple.issuer')],
-                (array) config('services.apple.audiences'),
+                (string) config('services.apple.jwks_url', 'https://appleid.apple.com/auth/keys'),
+                [(string) config('services.apple.issuer', 'https://appleid.apple.com')],
+                $audiences,
             );
         } catch (Throwable $e) {
             return $this->rejectIdentityToken('Apple', $e);
@@ -172,12 +177,17 @@ class AuthController extends Controller
             'id_token' => 'required|string',
         ]);
 
+        $audiences = array_values(array_filter(array_merge(
+            (array) config('services.google.audiences', []),
+            (array) config('services.google.client_ids', [])
+        )));
+
         try {
             $claims = $this->tokenVerifier->verify(
                 $validated['id_token'],
-                (string) config('services.google.jwks_url'),
-                (array) config('services.google.issuers'),
-                (array) config('services.google.audiences'),
+                (string) config('services.google.jwks_url', 'https://www.googleapis.com/oauth2/v3/certs'),
+                (array) config('services.google.issuers', ['https://accounts.google.com', 'accounts.google.com']),
+                $audiences,
             );
         } catch (Throwable $e) {
             return $this->rejectIdentityToken('Google', $e);
@@ -196,6 +206,9 @@ class AuthController extends Controller
                 ], 422);
             }
 
+            // Google marks whether it has verified the address. An unverified
+            // address proves nothing about who owns it, so it must not be used
+            // to attach to an existing account.
             $emailVerified = filter_var($claims['email_verified'] ?? false, FILTER_VALIDATE_BOOL);
             $existing = User::where('email', $email)->first();
 
