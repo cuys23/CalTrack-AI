@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import { X, Sparkles } from 'lucide-react-native';
 import { useApp } from '../context/AppContext';
-import { apiClient } from '../services/apiClient';
+import { isAppleSignInSupported, signInWithApple } from '../services/appleAuth';
+import { signInWithGoogle } from '../services/googleAuth';
 import { triggerHaptic } from '../utils/haptics';
 
 interface AuthModalProps {
@@ -28,14 +29,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose, onSucces
       setLoadingType('apple');
       triggerHaptic('medium');
 
-      // Native Apple ID authentication payload
-      const mockAppleUser = {
-        apple_user_id: 'apple_user_' + Date.now(),
-        email: 'user@icloud.com',
-        name: 'Apple User',
-      };
-
-      const res = await apiClient.loginWithApple(mockAppleUser);
+      const res = await signInWithApple();
+      if (!res) return; // user dismissed the Apple sheet
 
       if (res.user) {
         setUserProfile(prev => ({
@@ -70,15 +65,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose, onSucces
       setLoadingType('google');
       triggerHaptic('medium');
 
-      // Google OAuth authentication payload
-      const mockGoogleUser = {
-        google_user_id: 'google_user_' + Date.now(),
-        email: 'user@gmail.com',
-        name: 'Google User',
-        avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
-      };
-
-      const res = await apiClient.loginWithGoogle(mockGoogleUser);
+      const res = await signInWithGoogle();
+      if (!res) return; // user dismissed the Google picker
 
       if (res.user) {
         setUserProfile(prev => ({
@@ -134,6 +122,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose, onSucces
           {/* Social Sign-In Buttons */}
           <View style={styles.btnGroup}>
             {/* Apple Sign-In Button (Guideline-compliant) */}
+            {isAppleSignInSupported && (
             <TouchableOpacity
               onPress={handleAppleAuth}
               disabled={loadingType !== null}
@@ -149,6 +138,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose, onSucces
                 </View>
               )}
             </TouchableOpacity>
+            )}
 
             {/* Google Sign-In Button */}
             <TouchableOpacity

@@ -6,6 +6,9 @@ import { RulerPicker } from '../../components/RulerPicker';
 import { CalorieRing, MacroRing } from '../../components/CalorieRing';
 import { triggerHaptic } from '../../utils/haptics';
 import { apiClient } from '../../services/apiClient';
+import { isAppleSignInSupported, signInWithApple } from '../../services/appleAuth';
+import { signInWithGoogle } from '../../services/googleAuth';
+import { useIAP, getAvailablePurchases, ErrorCode } from 'expo-iap';
 
 // 1.1 Splash Screen
 export const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
@@ -60,50 +63,97 @@ export const WelcomeScreen: React.FC<{ onStart: () => void; onSignIn: () => void
 };
 
 // 1.17 Paywall Screen
+const PLAN_SKUS = {
+  yearly: 'com.vin.calorielq.yearly_pro',
+  monthly: 'com.vin.calorielq.monthly_pro',
+} as const;
+
+type PlanId = keyof typeof PLAN_SKUS;
+
 export const PaywallScreen: React.FC<{ onClose: () => void; onUnlock: () => void }> = ({ onClose, onUnlock }) => {
-  const { theme, showToast, isPremium, setIsPremium } = useApp() as any;
-  const [selectedPlan, setSelectedPlan] = useState<'yearly' | 'monthly' | 'lifetime'>('yearly');
+  const { theme, showToast, setIsPremium } = useApp() as any;
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>('yearly');
   const [loading, setLoading] = useState(false);
 
-  const handlePurchase = async () => {
-    try {
-      setLoading(true);
-      triggerHaptic('medium');
-      // Simulate/trigger StoreKit 2 verification
-      const productId = selectedPlan === 'yearly' ? 'com.caltrack.yearly_pro' : (selectedPlan === 'monthly' ? 'com.caltrack.monthly_pro' : 'com.caltrack.lifetime_pro');
-      
-      const mockJws = btoa(JSON.stringify({
-        productId,
-        transactionId: `tx_${Date.now()}`,
-        originalTransactionId: `orig_${Date.now()}`,
-        purchaseDate: Date.now(),
-        expiresDate: Date.now() + 30 * 24 * 60 * 60 * 1000,
-        environment: 'Sandbox'
-      }));
+  const {
+    connected,
+    subscriptions,
+    fetchProducts,
+    requestPurchase,
+    finishTransaction,
+  } = useIAP({
+    onPurchaseSuccess: async (purchase) => {
+      try {
+        // iOS hands us the StoreKit 2 JWS here; the backend is what decides
+        // whether it is real, so never unlock on the client's say-so.
+        const jws = purchase.purchaseToken;
+        if (!jws) throw new Error('Apple không trả về mã giao dịch.');
 
-      const res = await apiClient.verifyIapPurchase(`mock_hdr.${mockJws}.mock_sig`);
-      if (res.is_premium) {
+        const res = await apiClient.verifyIapPurchase(jws);
+        if (!res.is_premium) throw new Error('Giao dịch chưa được xác nhận.');
+
+        await finishTransaction({ purchase, isConsumable: false });
+
         if (setIsPremium) setIsPremium(true);
         triggerHaptic('success');
         showToast('Chúc mừng! Bạn đã mở khoá CalTrack Pro thành công!');
         onUnlock();
+      } catch (e: any) {
+        triggerHaptic('error');
+        showToast(e.message || 'Không xác thực được giao dịch.', 'error');
+      } finally {
+        setLoading(false);
       }
-    } catch (e: any) {
-      triggerHaptic('error');
-      // Fallback for local sandbox
-      if (setIsPremium) setIsPremium(true);
-      showToast('Đã kích hoạt quyền lợi CalTrack Pro!');
-      onUnlock();
-    } finally {
+    },
+    onPurchaseError: (error) => {
       setLoading(false);
+      if (error.code === ErrorCode.UserCancelled) return;
+      triggerHaptic('error');
+      showToast(error.message || 'Thanh toán thất bại.', 'error');
+    },
+    onError: (error) => {
+      setLoading(false);
+      showToast(error.message || 'Không kết nối được App Store.', 'error');
+    },
+  });
+
+  useEffect(() => {
+    if (!connected) return;
+    fetchProducts({ skus: Object.values(PLAN_SKUS), type: 'subs' });
+  }, [connected, fetchProducts]);
+
+  // App Store review requires showing the store's own localised price.
+  const priceOf = (plan: PlanId) =>
+    subscriptions.find((s) => s.id === PLAN_SKUS[plan])?.displayPrice;
+
+  const handlePurchase = () => {
+    if (!connected) {
+      showToast('Chưa kết nối được App Store, thử lại sau.', 'error');
+      return;
     }
+
+    setLoading(true);
+    triggerHaptic('medium');
+
+    // Resolves via onPurchaseSuccess / onPurchaseError, not by awaiting here.
+    requestPurchase({
+      request: {
+        apple: { sku: PLAN_SKUS[selectedPlan] },
+        google: { skus: [PLAN_SKUS[selectedPlan]] },
+      },
+      type: 'subs',
+    });
   };
 
   const handleRestore = async () => {
     try {
       setLoading(true);
       triggerHaptic('light');
-      const res = await apiClient.restoreIapPurchases([]);
+
+      const purchases = await getAvailablePurchases();
+      const tokens = purchases.map((p) => p.purchaseToken).filter(Boolean) as string[];
+
+      const res = await apiClient.restoreIapPurchases(tokens);
       if (res.is_premium) {
         if (setIsPremium) setIsPremium(true);
         triggerHaptic('success');
@@ -122,7 +172,7 @@ export const PaywallScreen: React.FC<{ onClose: () => void; onUnlock: () => void
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.bg }]} contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 30 }}>
-        <TouchableOpacity onPress={handleRestore} style={{ padding: 8 }}>
+        <TouchableOpacity onPress={handleRestore} disabled={loading} style={{ padding: 8 }}>
           <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: '700' }}>Khôi phục (Restore)</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -176,7 +226,9 @@ export const PaywallScreen: React.FC<{ onClose: () => void; onUnlock: () => void
         </View>
         <View>
           <Text style={{ fontSize: 16, fontWeight: '800', color: theme.text }}>Gói 1 Năm (Khuyên dùng)</Text>
-          <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>$29.99 / năm (chỉ $2.49 / tháng)</Text>
+          <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+            {priceOf('yearly') ? `${priceOf('yearly')} / năm` : 'Đang tải giá...'}
+          </Text>
         </View>
       </TouchableOpacity>
 
@@ -193,13 +245,15 @@ export const PaywallScreen: React.FC<{ onClose: () => void; onUnlock: () => void
       >
         <View>
           <Text style={{ fontSize: 16, fontWeight: '800', color: theme.text }}>Gói 1 Tháng</Text>
-          <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>$4.99 / tháng</Text>
+          <Text style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2 }}>
+            {priceOf('monthly') ? `${priceOf('monthly')} / tháng` : 'Đang tải giá...'}
+          </Text>
         </View>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={handlePurchase} disabled={loading} style={[styles.btnPrimary, { backgroundColor: '#10B981', marginTop: 24 }]}>
+      <TouchableOpacity onPress={handlePurchase} disabled={loading || !connected} style={[styles.btnPrimary, { backgroundColor: '#10B981', marginTop: 24, opacity: loading || !connected ? 0.6 : 1 }]}>
         <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>
-          {loading ? 'Đang kích hoạt...' : 'Bắt đầu dùng thử 7 ngày miễn phí'}
+          {loading ? 'Đang xử lý...' : 'Bắt đầu dùng thử 7 ngày miễn phí'}
         </Text>
       </TouchableOpacity>
     </ScrollView>
@@ -215,11 +269,9 @@ export const SignInScreen: React.FC<{ onComplete: () => void; onBack: () => void
     try {
       setLoadingType('apple');
       triggerHaptic('medium');
-      const res = await apiClient.loginWithApple({
-        apple_user_id: 'apple_user_' + Date.now(),
-        email: 'user@icloud.com',
-        name: 'Apple User',
-      });
+      const res = await signInWithApple();
+      if (!res) return; // user dismissed the Apple sheet
+
       if (res.user) {
         setUserProfile(prev => ({ ...prev, name: res.user.name || prev.name }));
         if (res.user.daily_goal) {
@@ -247,12 +299,9 @@ export const SignInScreen: React.FC<{ onComplete: () => void; onBack: () => void
     try {
       setLoadingType('google');
       triggerHaptic('medium');
-      const res = await apiClient.loginWithGoogle({
-        google_user_id: 'google_user_' + Date.now(),
-        email: 'user@gmail.com',
-        name: 'Google User',
-        avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
-      });
+      const res = await signInWithGoogle();
+      if (!res) return; // user dismissed the Google picker
+
       if (res.user) {
         setUserProfile(prev => ({
           ...prev,
@@ -294,15 +343,17 @@ export const SignInScreen: React.FC<{ onComplete: () => void; onBack: () => void
       </Text>
 
       <View style={{ gap: 14 }}>
-        <TouchableOpacity
-          onPress={handleAppleLogin}
-          disabled={loadingType !== null}
-          style={[styles.socialBtn, { backgroundColor: '#000', borderColor: '#333' }]}
-        >
-          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
-            {loadingType === 'apple' ? 'Đang xác thực...' : '  Tiếp tục với Apple'}
-          </Text>
-        </TouchableOpacity>
+        {isAppleSignInSupported && (
+          <TouchableOpacity
+            onPress={handleAppleLogin}
+            disabled={loadingType !== null}
+            style={[styles.socialBtn, { backgroundColor: '#000', borderColor: '#333' }]}
+          >
+            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>
+              {loadingType === 'apple' ? 'Đang xác thực...' : '  Tiếp tục với Apple'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           onPress={handleGoogleLogin}
