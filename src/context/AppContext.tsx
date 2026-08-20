@@ -11,6 +11,7 @@ import {
   Achievement
 } from '../types';
 import { triggerHaptic } from '../utils/haptics';
+import { apiClient } from '../services/apiClient';
 import { LightTheme, DarkTheme, AppTheme } from '../constants/theme';
 
 export interface ToastItem {
@@ -67,13 +68,25 @@ interface AppContextType {
     dietType: 'standard' | 'vegetarian' | 'vegan' | 'keto';
   }) => UserGoals;
 
+  /**
+   * Whether the account currently holds a Pro entitlement. The server is the
+   * authority; this mirrors it so screens can gate without a round trip.
+   *
+   * Never persisted. Reading it from local storage would let anyone with device
+   * access grant themselves Pro by editing a file.
+   */
+  isPremium: boolean;
+  setIsPremium: (value: boolean) => void;
+
   exportDataAsCsv: () => string;
   resetAllData: () => Promise<void>;
+  wipeLocalAccountData: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const todayStr = new Date().toISOString().split('T')[0];
+/** Computed fresh on every call so date rolls over at midnight. */
+const getToday = () => new Date().toISOString().split('T')[0];
 
 const STORAGE_KEYS = {
   THEME: 'caltrack_theme_mode',
@@ -88,113 +101,74 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_PROFILE: UserProfile = {
-  name: 'Minh Hoàng',
-  avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+  name: '',
+  avatarUrl: '',
   gender: 'female',
-  age: 24,
+  age: 25,
   heightCm: 165,
-  currentWeightKg: 65.4,
-  targetWeightKg: 57.0,
+  currentWeightKg: 60,
+  targetWeightKg: 55,
   activityLevel: 'moderate',
   goal: 'lose',
   dietType: 'standard',
-  isPro: true,
+  isPro: false,
   scanQuotaRemaining: 10,
-  referralCode: 'CAL89X',
-  referredCount: 3,
-  streakCount: 12,
-  longestStreak: 23,
-  streakFreezesRemaining: 2,
-  appDaysCount: 45,
-  totalLoggedMeals: 142,
-  totalWeightLostKg: 3.2
+  referralCode: '',
+  referredCount: 0,
+  streakCount: 0,
+  longestStreak: 0,
+  streakFreezesRemaining: 0,
+  appDaysCount: 0,
+  totalLoggedMeals: 0,
+  totalWeightLostKg: 0
 };
 
 const DEFAULT_GOALS: UserGoals = {
-  targetCalories: 1847,
-  targetProtein: 138,
-  targetCarbs: 185,
-  targetFat: 51,
-  currentWeight: 65.4,
-  targetWeight: 57.0,
-  targetDate: '2026-11-20',
-  weeklyPace: 0.8,
+  targetCalories: 2000,
+  targetProtein: 120,
+  targetCarbs: 200,
+  targetFat: 60,
+  currentWeight: 60,
+  targetWeight: 55,
+  targetDate: '',
+  weeklyPace: 0.5,
   autoRecalculate: true
 };
 
-const INITIAL_FOOD_LOGS: FoodItem[] = [
-  {
-    id: 'demo-1',
-    name: 'Bánh Mì Thịt Nướng Pate',
-    mealType: 'breakfast',
-    time: '07:45',
-    date: todayStr,
-    calories: 460,
-    portion: 1,
-    portionUnit: 'cái',
-    portionGrams: 200,
-    macros: { protein: 21, carbs: 54, fat: 18 },
-    healthScore: 7.2,
-    confidence: 'high',
-    source: 'verified',
-    fkbSourceLabel: 'Viện Dinh Dưỡng Quốc Gia (VN FCT)',
-    imageUrl: 'https://images.unsplash.com/photo-1626804475297-41608ea09aeb?auto=format&fit=crop&w=800&q=80'
-  },
-  {
-    id: 'demo-2',
-    name: 'Salad Cá Hồi Áp Chảo Bơ',
-    mealType: 'lunch',
-    time: '12:30',
-    date: todayStr,
-    calories: 480,
-    portion: 1,
-    portionUnit: 'đĩa',
-    portionGrams: 350,
-    macros: { protein: 38, carbs: 16, fat: 29 },
-    healthScore: 9.8,
-    confidence: 'high',
-    source: 'verified',
-    fkbSourceLabel: 'USDA FoodData Central',
-    imageUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80'
-  }
-];
+const INITIAL_FOOD_LOGS: FoodItem[] = [];
 
-const INITIAL_WEIGHT_LOGS: WeightEntry[] = [
-  { id: 'w-1', date: '2026-07-18', weight: 67.5 },
-  { id: 'w-2', date: '2026-08-01', weight: 66.4 },
-  { id: 'w-3', date: todayStr, weight: 65.4 }
-];
+const INITIAL_WEIGHT_LOGS: WeightEntry[] = [];
 
 const INITIAL_ACHIEVEMENTS: Achievement[] = [
-  { id: 'ach-1', title: 'Ngày đầu tiên', description: 'Ghi món ăn đầu tiên', icon: '🌟', progress: 100, target: '1 món' },
-  { id: 'ach-2', title: '7 ngày kiên trì', description: 'Đạt chuỗi 7 ngày liên tiếp', icon: '🔥', progress: 100, target: '7 ngày' },
-  { id: 'ach-3', title: 'Bậc thầy Protein', description: 'Đạt 130g protein trong 1 ngày', icon: '🥩', progress: 100, target: '1 ngày' },
-  { id: 'ach-4', title: 'Chinh phục 30 ngày', description: 'Ghi nhật ký liên tục 1 tháng', icon: '🏆', progress: 65, target: '30 ngày' }
+  { id: 'ach-1', title: 'Ngày đầu tiên', description: 'Ghi món ăn đầu tiên', icon: '🌟', progress: 0, target: '1 món' },
+  { id: 'ach-2', title: '7 ngày kiên trì', description: 'Đạt chuỗi 7 ngày liên tiếp', icon: '🔥', progress: 0, target: '7 ngày' },
+  { id: 'ach-3', title: 'Bậc thầy Protein', description: 'Đạt 130g protein trong 1 ngày', icon: '🥩', progress: 0, target: '1 ngày' },
+  { id: 'ach-4', title: 'Chinh phục 30 ngày', description: 'Ghi nhật ký liên tục 1 tháng', icon: '🏆', progress: 0, target: '30 ngày' }
 ];
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [themeMode, setThemeModeState] = useState<ThemeMode>('dark');
-  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+  const [selectedDate, setSelectedDate] = useState<string>(getToday());
 
   const [userProfile, setUserProfile] = useState<UserProfile>(DEFAULT_PROFILE);
   const [userGoals, setUserGoals] = useState<UserGoals>(DEFAULT_GOALS);
   const [foodLogs, setFoodLogs] = useState<FoodItem[]>(INITIAL_FOOD_LOGS);
   const [weightLogs, setWeightLogs] = useState<WeightEntry[]>(INITIAL_WEIGHT_LOGS);
-  const [measurements, setMeasurements] = useState<BodyMeasurements[]>([
-    { id: 'm-1', date: todayStr, waist: 68, hips: 94, chest: 86, arms: 26, bodyFatPercentage: 22.4 }
-  ]);
-  const [exercises, setExercises] = useState<ExerciseEntry[]>([
-    { id: 'e-1', date: todayStr, title: 'Bước chân Apple Health (8,432 bước)', durationMinutes: 75, caloriesBurned: 180, type: 'walk', isAutoSynced: true }
-  ]);
+  const [measurements, setMeasurements] = useState<BodyMeasurements[]>([]);
+  const [exercises, setExercises] = useState<ExerciseEntry[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>(INITIAL_ACHIEVEMENTS);
-  const [savedMeals, setSavedMeals] = useState<FoodItem[]>([INITIAL_FOOD_LOGS[0], INITIAL_FOOD_LOGS[1]]);
+  const [savedMeals, setSavedMeals] = useState<FoodItem[]>([]);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  // Deliberately not restored from storage: entitlement comes from the server,
+  // so a fresh launch starts locked and unlocks once the server confirms.
+  const [isPremium, setIsPremium] = useState<boolean>(false);
 
   // 1. Initial Load from AsyncStorage
   useEffect(() => {
     const loadPersistedData = async () => {
       try {
-        const [savedTheme, savedProfile, savedGoals, savedFoods, savedWeights, savedMeas, savedEx, savedFavs] = await Promise.all([
+        const [savedTheme, savedProfile, savedGoals, savedFoods, savedWeights, savedMeas, savedEx, savedFavs, savedAchievements] = await Promise.all([
           AsyncStorage.getItem(STORAGE_KEYS.THEME),
           AsyncStorage.getItem(STORAGE_KEYS.PROFILE),
           AsyncStorage.getItem(STORAGE_KEYS.GOALS),
@@ -202,7 +176,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           AsyncStorage.getItem(STORAGE_KEYS.WEIGHT_LOGS),
           AsyncStorage.getItem(STORAGE_KEYS.MEASUREMENTS),
           AsyncStorage.getItem(STORAGE_KEYS.EXERCISES),
-          AsyncStorage.getItem(STORAGE_KEYS.SAVED_MEALS)
+          AsyncStorage.getItem(STORAGE_KEYS.SAVED_MEALS),
+          AsyncStorage.getItem(STORAGE_KEYS.ACHIEVEMENTS)
         ]);
 
         if (savedTheme) setThemeModeState(savedTheme as ThemeMode);
@@ -213,6 +188,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (savedMeas) setMeasurements(JSON.parse(savedMeas));
         if (savedEx) setExercises(JSON.parse(savedEx));
         if (savedFavs) setSavedMeals(JSON.parse(savedFavs));
+        if (savedAchievements) setAchievements(JSON.parse(savedAchievements));
       } catch (err) {
         console.error('Failed to load local data:', err);
       }
@@ -220,10 +196,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadPersistedData();
   }, []);
 
+  // 1b. Ask the server whether this account is entitled.
+  //
+  // Entitlement starts false and is never restored from local storage, so
+  // without this a paying subscriber would relaunch the app and find Pro locked.
+  // A failure leaves it locked rather than guessing generously.
+  useEffect(() => {
+    const syncEntitlement = async () => {
+      try {
+        if (!(await apiClient.getToken())) return;
+
+        const res = await apiClient.getIapStatus();
+        setIsPremium(Boolean(res.is_premium));
+      } catch {
+        // Offline or an expired session: stay locked until the server answers.
+      }
+    };
+    syncEntitlement();
+  }, []);
+
   // 2. Auto-save effects
   const persist = (key: string, data: any) => {
     AsyncStorage.setItem(key, JSON.stringify(data)).catch((e) => console.warn('AsyncStorage save error', e));
   };
+
+  // Achievements had a storage key but nothing ever wrote to it, so badge
+  // progress silently reset every time the app was reopened.
+  useEffect(() => {
+    persist(STORAGE_KEYS.ACHIEVEMENTS, achievements);
+  }, [achievements]);
 
   const setThemeMode = (t: ThemeMode) => {
     triggerHaptic('light');
@@ -497,12 +498,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // 9. Reset All Data
   const resetAllData = async () => {
     await AsyncStorage.clear();
-    setFoodLogs(INITIAL_FOOD_LOGS);
-    setWeightLogs(INITIAL_WEIGHT_LOGS);
+    setFoodLogs([]);
+    setWeightLogs([]);
+    setMeasurements([]);
+    setExercises([]);
+    setSavedMeals([]);
+    setAchievements(INITIAL_ACHIEVEMENTS);
     setUserProfile(DEFAULT_PROFILE);
     setUserGoals(DEFAULT_GOALS);
-    setSavedMeals([INITIAL_FOOD_LOGS[0], INITIAL_FOOD_LOGS[1]]);
+    setIsPremium(false);
     showToast('Đã đặt lại toàn bộ dữ liệu về mặc định.');
+  };
+
+  /**
+   * Wipe every trace of the account from this device.
+   *
+   * Deleting server-side is only half of Guideline 5.1.1(v): leaving the auth
+   * token and the meal history on the phone means the account looks deleted
+   * while its data is still sitting there.
+   */
+  const wipeLocalAccountData = async () => {
+    await apiClient.setToken(null);
+    await AsyncStorage.clear();
+
+    setFoodLogs([]);
+    setWeightLogs([]);
+    setMeasurements([]);
+    setExercises([]);
+    setSavedMeals([]);
+    setAchievements(INITIAL_ACHIEVEMENTS);
+    setUserProfile(DEFAULT_PROFILE);
+    setUserGoals(DEFAULT_GOALS);
+    setIsPremium(false);
   };
 
   return (
@@ -513,6 +540,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         theme,
         selectedDate,
         setSelectedDate,
+        isPremium,
+        setIsPremium,
         userProfile,
         setUserProfile,
         userGoals,
@@ -538,7 +567,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addExercise,
         calculateAndApplyPlan,
         exportDataAsCsv,
-        resetAllData
+        resetAllData,
+        wipeLocalAccountData
       }}
     >
       {children}

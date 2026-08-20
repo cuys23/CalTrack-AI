@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, StatusBar, Modal, ScrollView, ActivityIndicator, BackHandler } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, TouchableOpacity, Text, StatusBar, Modal, ScrollView, ActivityIndicator, BackHandler, useWindowDimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Home, TrendingUp, Plus, User, Sparkles, Layers, X, Undo } from 'lucide-react-native';
 import { AppProvider, useApp } from './src/context/AppContext';
+import { I18nProvider, useTranslation } from './src/i18n';
 
 // Screens
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -17,12 +18,12 @@ import { NutritionDetailScreen, LogMenuSheet, TextLogSheet } from './src/screens
 import { FoodSearchScreen, StreakDetailScreen, AchievementsScreen, ReferralScreen } from './src/screens/library/LibraryScreens';
 import { ExerciseLogScreen, HealthSyncSettingsScreen } from './src/screens/exercise/ExerciseScreens';
 import { MeasurementLogSheet, PhotoCompareScreen, WeeklyReportScreen } from './src/screens/progress/ProgressSubScreens';
-import { VoiceLogSheet, FixResultSheet, QuickAddSheet, AddExerciseSheet } from './src/screens/scanning/ScanningSubSheets';
-import { FoodDetailScreen, CreateFoodScreen, SavedMealsScreen, RecipeImportScreen } from './src/screens/library/RecipeAndSavedScreens';
+import { FixResultSheet, QuickAddSheet, AddExerciseSheet } from './src/screens/scanning/ScanningSubSheets';
+import { FoodDetailScreen, CreateFoodScreen, SavedMealsScreen } from './src/screens/library/RecipeAndSavedScreens';
 import { NotificationSettingsScreen, WidgetsAndWatchScreen, EditGoalsScreen } from './src/screens/gamification/WidgetsAndSettingsScreens';
 
 import { AiFoodEngine } from './src/services/aiFoodEngine';
-import { apiClient } from './src/services/apiClient';
+import { apiClient, ApiError } from './src/services/apiClient';
 import { FoodItem } from './src/types';
 import { triggerHaptic } from './src/utils/haptics';
 
@@ -40,7 +41,6 @@ export type ScreenId =
   | 'food_detail'
   | 'create_food'
   | 'saved_meals'
-  | 'recipe_import'
   | 'progress'
   | 'measurement_log'
   | 'photo_compare'
@@ -55,35 +55,28 @@ export type ScreenId =
   | 'referral'
   | 'profile';
 
-type SheetId = 'log' | 'text' | 'voice' | 'quick_add' | 'add_exercise' | 'fix_result';
+type SheetId = 'log' | 'text' | 'quick_add' | 'add_exercise' | 'fix_result';
 
 const ONBOARDED_KEY = 'caltrack_onboarded';
 
-/** Routes drawn edge-to-edge: no safe-area padding, no tab bar. */
-const IMMERSIVE: ScreenId[] = ['camera', 'food_result'];
-const TAB_ROUTES: ScreenId[] = ['home', 'progress', 'food_search', 'profile'];
-
 function MainApp() {
-  const { theme, themeMode, addFoodLog, addExercise, foodLogs, toasts, removeToast } = useApp();
+  const { theme, themeMode, addFoodLog, addExercise, foodLogs, toasts, removeToast, showToast } = useApp();
+  const { t } = useTranslation();
+
+  // Phone widths pass through untouched; only tablets hit the cap.
+  const { width: windowWidth } = useWindowDimensions();
+  const isTablet = windowWidth > 700;
 
   const [stack, setStack] = useState<ScreenId[]>(['splash']);
   const currentScreen = stack[stack.length - 1];
 
-  const push = useCallback((screen: ScreenId) => {
-    setStack((prev) => (prev[prev.length - 1] === screen ? prev : [...prev, screen]));
-  }, []);
-  const back = useCallback(() => {
-    setStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : ['home']));
-  }, []);
-  const replace = useCallback((screen: ScreenId) => {
-    setStack((prev) => [...prev.slice(0, -1), screen]);
-  }, []);
-  const reset = useCallback((screen: ScreenId) => setStack([screen]), []);
+  const push = (screen: ScreenId) => setStack((p) => (p[p.length - 1] === screen ? p : [...p, screen]));
+  const back = () => setStack((p) => (p.length > 1 ? p.slice(0, -1) : ['home']));
+  const reset = (screen: ScreenId) => setStack([screen]);
 
   const [sheet, setSheet] = useState<SheetId | null>(null);
   const [cameraMode, setCameraMode] = useState<'food' | 'barcode' | 'label'>('food');
   const [analyzedFood, setAnalyzedFood] = useState<FoodItem | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
   const [selectedDetailFood, setSelectedDetailFood] = useState<FoodItem | null>(null);
   const [showScreenJumper, setShowScreenJumper] = useState(false);
 
@@ -101,15 +94,9 @@ function MainApp() {
       return false;
     });
     return () => sub.remove();
-  }, [sheet, stack.length, back]);
+  }, [sheet, stack.length]);
 
   const markOnboarded = () => AsyncStorage.setItem(ONBOARDED_KEY, '1');
-
-  const openCamera = (mode: 'food' | 'barcode' | 'label') => {
-    setSheet(null);
-    setCameraMode(mode);
-    push('camera');
-  };
 
   const showResult = (food: FoodItem) => {
     setAnalyzedFood(food);
@@ -117,21 +104,38 @@ function MainApp() {
     push('food_result');
   };
 
-  const handleCapturePhoto = async (imageUri: string, isBarcode = false) => {
+  const handleCapturePhoto = async (imageUri: string, isBarcode = false, imageBase64?: string) => {
     triggerHaptic('success');
     setAnalyzedFood(null);
-    setAnalyzing(true);
-    replace('food_result');
+    setStack((p) => [...p.slice(0, -1), 'food_result']); // camera -> result, camera stays off the stack
 
     let item: FoodItem;
     if (isBarcode || cameraMode === 'barcode') {
-      item = await AiFoodEngine.scanBarcode('8934563128901');
+      // `imageUri` carries the scanned code in barcode mode. It used to be
+      // discarded in favour of a hardcoded barcode, so every scan produced the
+      // same product.
+      const scanned = await AiFoodEngine.scanBarcode(imageUri);
+
+      if (!scanned) {
+        // Open Food Facts covers Vietnamese products thinly, so this is an
+        // ordinary outcome. Offer manual entry instead of inventing a product.
+        back();
+        setSheet('quick_add');
+        showToast('Không tìm thấy sản phẩm cho mã vạch này. Bạn có thể nhập thủ công.');
+        return;
+      }
+
+      item = scanned;
     } else {
       try {
-        // Attempt backend AI Vision Pipeline
-        const res = await apiClient.analyzeMeal(imageUri, 'breakfast');
-        if (res?.meal_log?.foods && res.meal_log.foods.length > 0) {
-          const first = res.meal_log.foods[0];
+        if (!imageBase64) throw new Error('Ảnh không kèm dữ liệu để phân tích.');
+
+        // The scan is queued server-side, so wait for the worker instead of
+        // reading the still-empty meal_log that /meal/analyze returns at once.
+        const mealLog = await apiClient.analyzeMealAndWait(imageBase64, 'breakfast');
+        if (mealLog?.foods?.length) {
+          const res = { meal_log: mealLog };
+          const first = mealLog.foods[0];
           item = {
             id: String(res.meal_log.id || Date.now()),
             name: first.name,
@@ -156,13 +160,22 @@ function MainApp() {
         } else {
           item = await AiFoodEngine.analyzeImage(imageUri);
         }
-      } catch {
-        // Offline heuristic fallback
+      } catch (e: any) {
+        // Being refused for lack of a subscription is not an offline condition.
+        // Falling back here would hand a free account a fabricated result and
+        // make the paywall look broken rather than enforced.
+        if (e instanceof ApiError && e.isNotEntitled) {
+          back();
+          push('paywall');
+          showToast('Quét bằng AI là tính năng của CalorieIQ Pro.');
+          return;
+        }
+
+        // Genuinely offline: fall back to the local estimate.
         item = await AiFoodEngine.analyzeImage(imageUri);
       }
     }
     setAnalyzedFood(item);
-    setAnalyzing(false);
   };
 
   const handleSaveAnalyzedFood = (food: FoodItem) => {
@@ -196,12 +209,23 @@ function MainApp() {
               markOnboarded();
               // Re-run from Profile returns there; first run continues to the paywall.
               if (stack.includes('profile')) back();
-              else reset('paywall');
+              else push('paywall');
             }}
           />
         );
       case 'paywall':
-        return <PaywallScreen onClose={() => reset('home')} onUnlock={() => reset('home')} />;
+        return (
+          <PaywallScreen
+            onClose={() => {
+              if (stack.includes('welcome') || stack.includes('onboarding')) push('signin');
+              else reset('home');
+            }}
+            onUnlock={() => {
+              if (stack.includes('welcome') || stack.includes('onboarding')) push('signin');
+              else reset('home');
+            }}
+          />
+        );
       case 'signin':
         return (
           <SignInScreen
@@ -227,7 +251,7 @@ function MainApp() {
       case 'camera':
         return <CameraScanScreen onCapture={handleCapturePhoto} onClose={back} />;
       case 'food_result':
-        if (analyzing || !analyzedFood) {
+        if (!analyzedFood) {
           return (
             <View style={[styles.loading, { backgroundColor: theme.bg }]}>
               <ActivityIndicator size="large" color={theme.accent} />
@@ -293,16 +317,6 @@ function MainApp() {
         );
       case 'saved_meals':
         return <SavedMealsScreen onSelectFood={openFoodDetail} onBack={back} />;
-      case 'recipe_import':
-        return (
-          <RecipeImportScreen
-            onImported={(food) => {
-              addFoodLog(food);
-              back();
-            }}
-            onBack={back}
-          />
-        );
       case 'progress':
         return (
           <ProgressScreen
@@ -341,7 +355,16 @@ function MainApp() {
       case 'referral':
         return <ReferralScreen onBack={back} />;
       case 'profile':
-        return <ProfileScreen onBack={() => reset('home')} onNavigate={(screen) => push(screen as ScreenId)} />;
+        return (
+          <ProfileScreen
+            onBack={() => reset('home')}
+            onNavigate={(screen) => push(screen as ScreenId)}
+            onAccountDeleted={async () => {
+              await AsyncStorage.removeItem(ONBOARDED_KEY);
+              reset('welcome');
+            }}
+          />
+        );
     }
   };
 
@@ -350,9 +373,12 @@ function MainApp() {
       case 'log':
         return (
           <LogMenuSheet
-            onSelectCamera={openCamera}
+            onSelectCamera={(mode) => {
+              setSheet(null);
+              setCameraMode(mode);
+              push('camera');
+            }}
             onSelectText={() => setSheet('text')}
-            onSelectVoice={() => setSheet('voice')}
             onSelectSearch={() => {
               setSheet(null);
               push('food_search');
@@ -361,18 +387,12 @@ function MainApp() {
               setSheet(null);
               push('saved_meals');
             }}
-            onSelectRecipe={() => {
-              setSheet(null);
-              push('recipe_import');
-            }}
             onSelectQuickAdd={() => setSheet('quick_add')}
             onClose={() => setSheet(null)}
           />
         );
       case 'text':
         return <TextLogSheet onResult={showResult} onClose={() => setSheet(null)} />;
-      case 'voice':
-        return <VoiceLogSheet onResult={showResult} onClose={() => setSheet(null)} />;
       case 'quick_add':
         return <QuickAddSheet onSave={addFoodLog} onClose={() => setSheet(null)} />;
       case 'add_exercise':
@@ -394,8 +414,9 @@ function MainApp() {
     }
   };
 
-  const immersive = IMMERSIVE.includes(currentScreen);
-  const showBottomTabBar = ([...TAB_ROUTES, 'saved_meals'] as ScreenId[]).includes(currentScreen);
+  // Camera & result are drawn edge-to-edge: no safe-area padding, no tab bar.
+  const immersive = currentScreen === 'camera' || currentScreen === 'food_result';
+  const showBottomTabBar = ['home', 'progress', 'food_search', 'profile', 'saved_meals'].includes(currentScreen);
 
   const renderTab = (screen: ScreenId, Icon: typeof Home, label: string) => (
     <TouchableOpacity
@@ -430,8 +451,30 @@ function MainApp() {
         </TouchableOpacity>
       )}
 
-      {/* Screen Render */}
-      <View style={{ flex: 1 }}>{renderActiveScreen()}</View>
+      {/*
+        Screen Render.
+
+        Every screen is laid out for phone widths, with no breakpoints anywhere
+        in src/. On a tablet that stretches rows and buttons across the full
+        width, which reads as an unfinished port. Capping the content column and
+        centring it fixes that everywhere at once, instead of adding breakpoints
+        to forty-odd screens.
+
+        ponytail: one global cap, no per-screen tablet layouts. Give a specific
+        screen a real two-column treatment only if it earns it.
+      */}
+      <View style={styles.contentOuter}>
+        <View
+          style={[
+            styles.contentColumn,
+            // The camera fills the screen by design; capping it would letterbox
+            // the viewfinder.
+            isTablet && currentScreen !== 'camera' && { maxWidth: 620 },
+          ]}
+        >
+          {renderActiveScreen()}
+        </View>
+      </View>
 
       {/* Floating Toast Notification Bar with Undo */}
       {toasts.length > 0 && (
@@ -517,7 +560,6 @@ function MainApp() {
                 { id: 'food_detail', label: '2.9 Chi tiết món ăn' },
                 { id: 'create_food', label: '2.10 Tạo món ăn mới' },
                 { id: 'saved_meals', label: '2.11 Món ăn đã lưu' },
-                { id: 'recipe_import', label: '2.12 Nhập từ công thức' },
                 { id: 'progress', label: '4.1 Tiến trình & Cân nặng' },
                 { id: 'measurement_log', label: '4.4 Số đo cơ thể' },
                 { id: 'photo_compare', label: '4.3 So sánh ảnh Trước / Sau' },
@@ -568,14 +610,18 @@ function MainApp() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <AppProvider>
-        <MainApp />
-      </AppProvider>
+      <I18nProvider>
+        <AppProvider>
+          <MainApp />
+        </AppProvider>
+      </I18nProvider>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
+  contentOuter: { flex: 1, alignItems: 'center' },
+  contentColumn: { flex: 1, width: '100%' },
   container: { flex: 1 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   floatingJumper: {
