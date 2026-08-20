@@ -104,19 +104,15 @@ export const NutritionDetailScreen: React.FC<{ onBack: () => void }> = ({ onBack
 export const LogMenuSheet: React.FC<{
   onSelectCamera: (mode: 'food' | 'barcode' | 'label') => void;
   onSelectText: () => void;
-  onSelectVoice: () => void;
   onSelectSearch: () => void;
   onSelectSaved: () => void;
-  onSelectRecipe: () => void;
   onSelectQuickAdd: () => void;
   onClose: () => void;
 }> = ({
   onSelectCamera,
   onSelectText,
-  onSelectVoice,
   onSelectSearch,
   onSelectSaved,
-  onSelectRecipe,
   onSelectQuickAdd,
   onClose
 }) => {
@@ -127,10 +123,8 @@ export const LogMenuSheet: React.FC<{
     { title: 'Quét mã vạch', subtitle: 'Thực phẩm đóng gói', icon: Barcode, color: '#3E7BFA', action: () => onSelectCamera('barcode') },
     { title: 'Quét bảng dinh dưỡng', subtitle: 'OCR nhãn vi chất', icon: FileText, color: '#22C55E', action: () => onSelectCamera('label') },
     { title: 'Nhập bằng văn bản', subtitle: 'Mô tả món tự nhiên', icon: Type, color: '#F5A524', action: onSelectText },
-    { title: 'Nhập giọng nói', subtitle: 'Nói món bạn vừa ăn', icon: Mic, color: '#E5484D', action: onSelectVoice },
     { title: 'Tìm trong thư viện', subtitle: 'Kho món ăn Việt', icon: Sparkles, color: '#8B5CF6', action: onSelectSearch },
-    { title: 'Món ăn đã lưu', subtitle: 'Món ăn yêu thích', icon: Bookmark, color: '#EC4899', action: onSelectSaved },
-    { title: 'Nhập từ công thức', subtitle: 'Dán link TikTok/Web', icon: Plus, color: '#10B981', action: onSelectRecipe }
+    { title: 'Món ăn đã lưu', subtitle: 'Món ăn yêu thích', icon: Bookmark, color: '#EC4899', action: onSelectSaved }
   ];
 
   return (

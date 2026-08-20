@@ -26,15 +26,19 @@ import { triggerHaptic } from '../utils/haptics';
 
 import { AuthModal } from '../components/AuthModal';
 import { apiClient } from '../services/apiClient';
+import { useTranslation, Locale } from '../i18n';
 
 interface ProfileScreenProps {
   onBack: () => void;
   onNavigate?: (screen: string) => void;
+  /** Return the app to its signed-out state after the account is deleted. */
+  onAccountDeleted: () => void;
 }
 
-export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onNavigate }) => {
-  const { theme, themeMode, setThemeMode, userProfile, userGoals, showToast } = useApp();
+export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onNavigate, onAccountDeleted }) => {
+  const { theme, themeMode, setThemeMode, userProfile, userGoals, showToast, wipeLocalAccountData } = useApp();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const { t, locale, setLocale } = useTranslation();
 
   const handleNav = (screen: string) => {
     triggerHaptic('light');
@@ -45,7 +49,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onNavigate
 
   const handleExportCSV = () => {
     triggerHaptic('success');
-    showToast('Đã xuất dữ liệu nhật ký CalTrack (CSV) thành công!');
+    showToast('Đã xuất dữ liệu nhật ký CalorieIQ (CSV) thành công!');
   };
 
   const handleLogout = async () => {
@@ -86,8 +90,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onNavigate
           onPress: async () => {
             try {
               await apiClient.deleteAccount();
+
+              // Guideline 5.1.1(v) is not satisfied by deleting the server
+              // record alone. Until the token and the local history are gone
+              // too, the account only appears to have been deleted.
+              await wipeLocalAccountData();
+
               triggerHaptic('success');
               showToast('Tài khoản và dữ liệu đã được xóa hoàn toàn.');
+              onAccountDeleted();
             } catch (e: any) {
               showToast(e.message || 'Lỗi khi xóa tài khoản.', 'error');
             }
@@ -133,7 +144,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onNavigate
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Sparkles size={18} color="#FF6B35" />
             <View>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: theme.text }}>Gói CalTrack Pro không giới hạn</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: theme.text }}>Gói CalorieIQ Pro không giới hạn</Text>
               <Text style={{ fontSize: 11, color: theme.textSecondary }}>Hết hạn: 18/08/2027 (Còn 365 ngày)</Text>
             </View>
           </View>
@@ -285,6 +296,27 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onNavigate
 
         <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
+        <View style={styles.menuItem}>
+          <View style={styles.menuLeft}>
+            <Text style={{ fontSize: 19 }}>🌐</Text>
+            <Text style={[styles.menuTitle, { color: theme.text, marginLeft: 12 }]}>{t('profile.sections.language')}</Text>
+          </View>
+
+          <TouchableOpacity
+            onPress={() => {
+              triggerHaptic('light');
+              setLocale(locale === 'en' ? 'vi' : 'en');
+            }}
+            style={[styles.modeToggle, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}
+          >
+            <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800' }}>
+              {locale === 'en' ? '🇺🇸 English' : '🇻🇳 Tiếng Việt'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.divider, { backgroundColor: theme.border }]} />
+
         <TouchableOpacity onPress={handleExportCSV} style={styles.menuItem}>
           <View style={styles.menuLeft}>
             <Download size={19} color={theme.textSecondary} />
@@ -336,7 +368,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onNavigate
 
       {/* Footer Version */}
       <View style={{ alignItems: 'center', marginTop: 24, marginBottom: 16 }}>
-        <Text style={{ fontSize: 12, fontWeight: '700', color: theme.textTertiary }}>CalTrack AI • v1.0.0 (Build 24)</Text>
+        <Text style={{ fontSize: 12, fontWeight: '700', color: theme.textTertiary }}>CalorieIQ • v1.0.0 (Build 24)</Text>
         <Text style={{ fontSize: 11, color: theme.textTertiary, marginTop: 2 }}>Thiết kế theo chuẩn Apple Human Interface Guidelines</Text>
       </View>
 

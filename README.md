@@ -10,7 +10,9 @@ Hệ sinh thái ứng dụng theo dõi dinh dưỡng, đếm calo, nhận diện
 - **Backend Production:** Laravel 12 + PostgreSQL 17 + Redis 7 + Nginx + Docker
 - **AI Vision Engine:** Google Gemini 2.5/3.0 & OpenAI GPT-4o Vision
 - **In-App Purchases:** Apple StoreKit 2 & Server Notifications V2 Webhook
-- **Offline First:** Local Storage caching & background sync khi có kết nối mạng
+- **Lưu cục bộ:** Nhật ký ăn uống, cân nặng và số đo lưu trên máy bằng AsyncStorage.
+  Chưa có hàng đợi đồng bộ nền — dữ liệu chỉ lên server qua các lệnh gọi API trực tiếp.
+- **Apple Health:** Đọc bước chân và calo tiêu hao, ghi cân nặng. Dữ liệu sức khoẻ không rời khỏi máy.
 
 ---
 

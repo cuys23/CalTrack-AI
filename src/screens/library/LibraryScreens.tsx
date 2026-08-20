@@ -7,7 +7,7 @@ import { FOOD_DATABASE, FKB_DATABASE, AiFoodEngine } from '../../services/aiFood
 import { triggerHaptic } from '../../utils/haptics';
 
 // 2.8 Food Search Screen
-export const FoodSearchScreen: React.FC<{ onSelectFood: (food: FoodItem) => void; onCreateFood?: () => void; onBack: () => void }> = ({ onSelectFood, onCreateFood, onBack }) => {
+export const FoodSearchScreen: React.FC<{ onSelectFood: (food: FoodItem) => void; onCreateFood: () => void; onBack: () => void }> = ({ onSelectFood, onCreateFood, onBack }) => {
   const { theme } = useApp();
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'all' | 'vietnamese' | 'my_foods'>('all');
@@ -30,13 +30,9 @@ export const FoodSearchScreen: React.FC<{ onSelectFood: (food: FoodItem) => void
           <ChevronLeft size={20} color={theme.text} />
         </TouchableOpacity>
         <Text style={[styles.screenTitle, { color: theme.text }]}>Tìm kiếm món ăn</Text>
-        {onCreateFood ? (
-          <TouchableOpacity onPress={onCreateFood} style={styles.iconBtn}>
-            <Plus size={20} color={theme.text} />
-          </TouchableOpacity>
-        ) : (
-          <View style={{ width: 36 }} />
-        )}
+        <TouchableOpacity onPress={onCreateFood} style={styles.iconBtn}>
+          <Plus size={20} color={theme.text} />
+        </TouchableOpacity>
       </View>
 
       {/* Search Input */}
@@ -185,7 +181,7 @@ export const ReferralScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
         <Gift size={40} color="#FF6B35" />
         <Text style={[styles.h1, { color: theme.text, textAlign: 'center', marginTop: 12 }]}>Tặng 1 tháng Pro Miễn Phí</Text>
         <Text style={{ color: theme.textSecondary, textAlign: 'center', fontSize: 14, marginVertical: 8 }}>
-          Mỗi khi 1 người bạn đăng ký bằng mã của bạn, cả hai đều nhận được 1 tháng CalTrack AI Pro miễn phí.
+          Mỗi khi 1 người bạn đăng ký bằng mã của bạn, cả hai đều nhận được 1 tháng CalorieIQ Pro miễn phí.
         </Text>
 
         <TouchableOpacity onPress={handleCopy} style={[styles.codeBox, { borderColor: theme.accent }]}>

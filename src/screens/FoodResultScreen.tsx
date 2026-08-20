@@ -10,7 +10,7 @@ import { triggerHaptic } from '../utils/haptics';
 interface FoodResultScreenProps {
   foodItem: FoodItem;
   onSave: (food: FoodItem) => void;
-  onFix?: () => void;
+  onFix: () => void;
   onClose: () => void;
 }
 
@@ -57,12 +57,10 @@ export const FoodResultScreen: React.FC<FoodResultScreenProps> = ({ foodItem, on
         <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
           <X size={20} color="#fff" />
         </TouchableOpacity>
-        {onFix && (
-          <TouchableOpacity onPress={onFix} style={styles.fixBtn}>
-            <Sparkles size={14} color="#fff" />
-            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800', marginLeft: 5 }}>AI đoán chưa đúng?</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity onPress={onFix} style={styles.fixBtn}>
+          <Sparkles size={14} color="#fff" />
+          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800', marginLeft: 5 }}>AI đoán chưa đúng?</Text>
+        </TouchableOpacity>
       </View>
 
       {/* 2. Overlaid Card */}
@@ -175,8 +173,17 @@ export const FoodResultScreen: React.FC<FoodResultScreenProps> = ({ foodItem, on
           {/* Medical & Nutrition Compliance Disclaimer */}
           <View style={{ marginTop: 16, padding: 10, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.03)', flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
             <AlertCircle size={14} color={theme.textTertiary} style={{ marginTop: 2 }} />
+            {/*
+              Guideline 1.4.1: an app that presents health figures must remind the
+              user to consult a professional. Citing the data sources says where
+              the numbers came from, not that they are safe to act on — and AI
+              estimates from a photograph can be off by hundreds of calories.
+            */}
             <Text style={{ fontSize: 11, color: theme.textTertiary, flex: 1, lineHeight: 15 }}>
-              Số liệu dinh dưỡng tham khảo đối chiếu theo Bảng thành phần thực phẩm Việt Nam (VN FCT) và USDA FoodData Central.
+              Số liệu do AI ước tính từ ảnh và chỉ mang tính tham khảo, không phải kết quả đo lường.
+              Ứng dụng không thay thế tư vấn của bác sĩ hoặc chuyên gia dinh dưỡng — hãy tham khảo ý
+              kiến chuyên gia trước khi thay đổi chế độ ăn.{'\n'}
+              Nguồn đối chiếu: Bảng thành phần thực phẩm Việt Nam (VN FCT) và USDA FoodData Central.
             </Text>
           </View>
         </View>
