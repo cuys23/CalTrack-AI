@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('subscription_products', function (Blueprint $table) {
             $table->id();
-            $table->string('product_id')->unique(); // e.g., com.caltrack.monthly_pro, com.caltrack.yearly_pro
+            $table->string('product_id')->unique(); // e.g., com.vin.calorielq.monthly_pro, com.vin.calorielq.yearly_pro
             $table->string('name');
             $table->string('type')->default('auto_renewable'); // auto_renewable, non_consumable
             $table->string('duration'); // 1_month, 1_year, lifetime

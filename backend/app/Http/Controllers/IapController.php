@@ -27,7 +27,7 @@ class IapController extends Controller
             // Default production products
             $products = collect([
                 [
-                    'product_id' => 'com.caltrack.monthly_pro',
+                    'product_id' => 'com.vin.calorielq.monthly_pro',
                     'name' => 'CalTrack Pro Hàng Tháng',
                     'type' => 'auto_renewable',
                     'duration' => '1_month',
@@ -36,7 +36,7 @@ class IapController extends Controller
                     'is_active' => true,
                 ],
                 [
-                    'product_id' => 'com.caltrack.yearly_pro',
+                    'product_id' => 'com.vin.calorielq.yearly_pro',
                     'name' => 'CalTrack Pro 1 Năm (Tiết kiệm 50%)',
                     'type' => 'auto_renewable',
                     'duration' => '1_year',
@@ -45,7 +45,7 @@ class IapController extends Controller
                     'is_active' => true,
                 ],
                 [
-                    'product_id' => 'com.caltrack.lifetime_pro',
+                    'product_id' => 'com.vin.calorielq.lifetime_pro',
                     'name' => 'CalTrack Pro Trọn Đời',
                     'type' => 'non_consumable',
                     'duration' => 'lifetime',

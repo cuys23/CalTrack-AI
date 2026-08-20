@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\IdentityTokenVerifier;
 use App\Services\GoalCalculator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -93,84 +95,133 @@ class AuthController extends Controller
     }
 
     /**
-     * Sign in or register with Apple ID token.
+     * Sign in or register with Sign in with Apple.
+     *
+     * The Apple user identifier is read from the verified `sub` claim of the
+     * identityToken, never from the request body.
      */
-    public function appleLogin(Request $request): JsonResponse
+    public function appleLogin(Request $request, IdentityTokenVerifier $verifier): JsonResponse
     {
         $validated = $request->validate([
-            'apple_user_id' => 'required|string',
-            'email' => 'nullable|email',
-            'name' => 'nullable|string',
+            'identity_token' => 'required|string',
+            // Apple only exposes the full name on the very first authorization.
+            'name' => 'nullable|string|max:255',
         ]);
 
-        $user = User::where('apple_user_id', $validated['apple_user_id'])->first();
-
-        if (!$user) {
-            $email = $validated['email'] ?? ($validated['apple_user_id'] . '@appleid.apple.com');
-            $user = User::firstOrCreate(
-                ['email' => $email],
-                [
-                    'name' => $validated['name'] ?? 'Apple User',
-                    'password' => Hash::make(uniqid('apple_', true)),
-                    'apple_user_id' => $validated['apple_user_id'],
-                    'current_weight_kg' => 65,
-                    'height_cm' => 170,
-                    'activity_level' => 'sedentary',
-                ]
-            );
-
-            if (!$user->dailyGoal) {
-                $goalData = $this->goalCalculator->calculate($user, 'maintain');
-                $user->dailyGoal()->create($goalData);
-            }
+        try {
+            $identity = $verifier->apple($validated['identity_token']);
+        } catch (\RuntimeException $e) {
+            return $this->rejectIdentity('Apple', $e);
         }
 
-        $token = $user->createToken('auth_token')->plainTextToken;
-
-        return response()->json([
-            'success' => true,
-            'token' => $token,
-            'user' => $user->load('dailyGoal'),
-            'is_premium' => $user->isPremium(),
-        ]);
+        return $this->signInWithIdentity(
+            column: 'apple_user_id',
+            identity: $identity,
+            // Apple users can hide their address; they still need one locally.
+            fallbackEmail: $identity['sub'] . '@privaterelay.appleid.com',
+            name: $validated['name'] ?? $identity['name'] ?? 'Apple User',
+        );
     }
 
     /**
-     * Sign in or register with Google ID token.
+     * Sign in or register with Google Sign-In.
+     *
+     * The Google user identifier and email are read from the verified id_token,
+     * never from the request body.
      */
-    public function googleLogin(Request $request): JsonResponse
+    public function googleLogin(Request $request, IdentityTokenVerifier $verifier): JsonResponse
     {
         $validated = $request->validate([
-            'google_user_id' => 'required|string',
-            'email' => 'required|email',
-            'name' => 'nullable|string',
-            'avatar_url' => 'nullable|string',
+            'id_token' => 'required|string',
         ]);
 
-        $user = User::where('email', $validated['email'])->first();
+        try {
+            $identity = $verifier->google($validated['id_token']);
+        } catch (\RuntimeException $e) {
+            return $this->rejectIdentity('Google', $e);
+        }
+
+        if (!$identity['email']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tài khoản Google này không cung cấp email.',
+            ], 422);
+        }
+
+        return $this->signInWithIdentity(
+            column: 'google_user_id',
+            identity: $identity,
+            fallbackEmail: $identity['email'],
+            name: $identity['name'] ?? 'Google User',
+            avatarUrl: $identity['picture'] ?? null,
+        );
+    }
+
+    private function rejectIdentity(string $provider, \RuntimeException $e): JsonResponse
+    {
+        Log::warning("Rejected {$provider} identity token", ['reason' => $e->getMessage()]);
+
+        return response()->json([
+            'success' => false,
+            'message' => "Không xác thực được tài khoản {$provider}.",
+        ], 401);
+    }
+
+    /**
+     * Find or create the local account behind an already-verified social identity.
+     *
+     * @param array{sub: string, email: ?string, email_verified: bool} $identity
+     */
+    private function signInWithIdentity(
+        string $column,
+        array $identity,
+        string $fallbackEmail,
+        string $name,
+        ?string $avatarUrl = null,
+    ): JsonResponse {
+        $user = User::where($column, $identity['sub'])->first();
+
+        // Only link an existing local account when the provider vouches for the
+        // address, otherwise an unverified email is a free account takeover.
+        if (!$user && $identity['email'] && $identity['email_verified']) {
+            $user = User::where('email', $identity['email'])->first();
+        }
+
+        $email = $identity['email'] ?? $fallbackEmail;
+
+        // We got here without a link, so the address belongs to someone else and
+        // the provider would not vouch for it. Refuse rather than hijack.
+        if (!$user && User::where('email', $email)->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email này đã thuộc về một tài khoản khác. Hãy đăng nhập bằng phương thức bạn đã dùng trước đó.',
+            ], 409);
+        }
 
         if (!$user) {
             $user = User::create([
-                'email' => $validated['email'],
-                'name' => $validated['name'] ?? 'Google User',
-                'password' => Hash::make(uniqid('google_', true)),
-                'avatar_url' => $validated['avatar_url'] ?? null,
+                'email' => $email,
+                'name' => $name,
+                'password' => Hash::make(uniqid($column . '_', true)),
+                $column => $identity['sub'],
+                'avatar_url' => $avatarUrl,
                 'current_weight_kg' => 65,
                 'height_cm' => 170,
                 'activity_level' => 'sedentary',
             ]);
+        } elseif ($user->{$column} !== $identity['sub']) {
+            $user->{$column} = $identity['sub'];
+            $user->save();
+        }
 
-            if (!$user->dailyGoal) {
-                $goalData = $this->goalCalculator->calculate($user, 'maintain');
-                $user->dailyGoal()->create($goalData);
-            }
+        if (!$user->dailyGoal) {
+            $user->dailyGoal()->create($this->goalCalculator->calculate($user, 'maintain'));
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
             'success' => true,
-            'message' => 'Đăng nhập Google thành công!',
             'token' => $token,
             'user' => $user->load('dailyGoal'),
             'is_premium' => $user->isPremium(),

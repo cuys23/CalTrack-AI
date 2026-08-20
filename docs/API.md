@@ -101,9 +101,9 @@ Tính toán lại mục tiêu theo công thức Mifflin-St Jeor & thể trạng 
 
 ### `GET /iap/products`
 Lấy danh sách các gói subscription đang kích hoạt:
-- `com.caltrack.monthly_pro` ($4.99/mo)
-- `com.caltrack.yearly_pro` ($29.99/yr)
-- `com.caltrack.lifetime_pro` ($69.99)
+- `com.vin.calorielq.monthly_pro` ($4.99/mo)
+- `com.vin.calorielq.yearly_pro` ($29.99/yr)
+- `com.vin.calorielq.lifetime_pro` ($69.99)
 
 ### `POST /iap/verify` (Auth Required)
 Xác thực giao dịch từ StoreKit 2 và cấp quyền Premium ngay lập tức.
