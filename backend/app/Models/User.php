@@ -26,6 +26,7 @@ class User extends Authenticatable
         'activity_level',
         'avatar_url',
         'apple_user_id',
+        'google_user_id',
     ];
 
     protected $hidden = [
@@ -61,7 +62,7 @@ class User extends Authenticatable
             ->where('status', 'active')
             ->where(function ($query) {
                 $query->whereNull('expires_at')
-                      ->orWhere('expires_at', '>', now());
+                    ->orWhere('expires_at', '>', now());
             })
             ->latestOfMany();
     }

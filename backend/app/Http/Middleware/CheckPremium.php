@@ -16,14 +16,14 @@ class CheckPremium
     {
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthenticated.',
             ], 401);
         }
 
-        if (!$user->isPremium()) {
+        if (! $user->isPremium()) {
             return response()->json([
                 'success' => false,
                 'is_premium' => false,

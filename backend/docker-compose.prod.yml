@@ -1,0 +1,135 @@
+# Production compose.
+#
+# Differs from docker-compose.yml in ways that matter: no bind mounts, so the
+# image is what runs; no database or cache ports published to the host; and
+# health checks that let dependents wait for readiness rather than for the
+# process to merely exist.
+#
+# TLS is expected to terminate in front of this stack — a load balancer or a
+# CDN. Nothing here listens on 443.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      RUN_MIGRATIONS: "true"
+    networks: [caltrack_network]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Uploaded meal images must outlive the container.
+      - storage:/var/www/storage/app/public
+
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      # Uploaded images are reached through the public/storage symlink, so the
+      # volume must be visible to the web tier as well as the app tier.
+      - storage:/var/www/storage/app/public:ro
+    networks: [caltrack_network]
+    depends_on:
+      app:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  queue-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # One migrator only; the web container owns that step.
+      RUN_MIGRATIONS: "false"
+    command: php artisan queue:work redis --tries=3 --timeout=120 --sleep=3 --max-time=3600
+    networks: [caltrack_network]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - storage:/var/www/storage/app/public
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-caltrack}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [caltrack_network]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_DATABASE:-caltrack}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata:/data
+    networks: [caltrack_network]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Nightly dump, kept for two weeks.
+  #
+  # ponytail: local dumps on the same host, which survive a bad migration but
+  # not the loss of the host. Ship them off-site before this holds real users'
+  # records.
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_DATABASE: ${DB_DATABASE:-caltrack}
+    networks: [caltrack_network]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # A real script rather than an inline command: YAML folding joined the lines
+    # into something the shell could not parse, and the container simply
+    # restart-looped.
+    volumes:
+      - backups:/backups
+      - ./docker/backup.sh:/usr/local/bin/backup.sh:ro
+    entrypoint: ["sh", "/usr/local/bin/backup.sh"]
+
+networks:
+  caltrack_network:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:
+  storage:
+  backups:

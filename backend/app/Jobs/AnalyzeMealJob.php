@@ -17,8 +17,11 @@ class AnalyzeMealJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public MealLog $mealLog;
+
     public ?string $hint;
+
     public int $tries = 3;
+
     public int $timeout = 60;
 
     public function __construct(MealLog $mealLog, ?string $hint = null)
@@ -40,6 +43,7 @@ class AnalyzeMealJob implements ShouldQueue
                 $this->mealLog->status = 'failed';
                 $this->mealLog->error_message = 'Không thể nhận diện món ăn từ hình ảnh. Vui lòng chụp rõ hơn.';
                 $this->mealLog->save();
+
                 return;
             }
 
@@ -68,7 +72,7 @@ class AnalyzeMealJob implements ShouldQueue
 
             Log::info("AnalyzeMealJob completed successfully for MealLog #{$this->mealLog->id}");
         } catch (\Throwable $e) {
-            Log::error("AnalyzeMealJob failed for MealLog #{$this->mealLog->id}: " . $e->getMessage());
+            Log::error("AnalyzeMealJob failed for MealLog #{$this->mealLog->id}: ".$e->getMessage());
             $this->mealLog->status = 'failed';
             $this->mealLog->error_message = 'Đã có lỗi trong quá trình xử lý AI. Vui lòng thử lại.';
             $this->mealLog->save();

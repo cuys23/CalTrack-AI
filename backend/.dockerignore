@@ -1,0 +1,31 @@
+# Everything here would otherwise be copied from the developer's machine into
+# the image, overwriting what the build just produced.
+
+# Host vendor carries dev dependencies and would replace the --no-dev install.
+vendor/
+
+# Generated against the host's dev packages. Laravel then tries to boot
+# providers that do not exist in a --no-dev image.
+bootstrap/cache/*.php
+
+# Real credentials. These must come from the runtime environment, never be
+# baked into an image that gets pushed to a registry.
+.env
+.env.*
+!.env.example
+
+# Local state with no meaning inside a container.
+storage/logs/*
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*
+public/storage
+
+# Not part of the runtime image.
+.git/
+.github/
+tests/
+phpunit.xml
+docker-compose*.yml
+node_modules/
+*.md

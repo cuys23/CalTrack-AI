@@ -4,18 +4,24 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Services\GoalCalculator;
+use App\Services\OidcTokenVerifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class AuthController extends Controller
 {
     protected GoalCalculator $goalCalculator;
 
-    public function __construct(GoalCalculator $goalCalculator)
+    protected OidcTokenVerifier $tokenVerifier;
+
+    public function __construct(GoalCalculator $goalCalculator, OidcTokenVerifier $tokenVerifier)
     {
         $this->goalCalculator = $goalCalculator;
+        $this->tokenVerifier = $tokenVerifier;
     }
 
     /**
@@ -75,7 +81,7 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        if (! $user || ! Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([
                 'email' => ['Thông tin đăng nhập không chính xác.'],
             ]);
@@ -93,33 +99,63 @@ class AuthController extends Controller
     }
 
     /**
-     * Sign in or register with Apple ID token.
+     * Sign in or register with Sign in with Apple.
+     *
+     * The client sends the identity token Apple issued on the device. Identity
+     * is taken from the token's verified claims, never from separate request
+     * fields: a caller controls its own request body, so trusting a `sub` or
+     * `email` sent alongside the token would leave the account open to anyone
+     * who knows the victim's identifier.
      */
     public function appleLogin(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'apple_user_id' => 'required|string',
-            'email' => 'nullable|email',
-            'name' => 'nullable|string',
+            'identity_token' => 'required|string',
+            'name' => 'nullable|string|max:255',
         ]);
 
-        $user = User::where('apple_user_id', $validated['apple_user_id'])->first();
+        try {
+            $claims = $this->tokenVerifier->verify(
+                $validated['identity_token'],
+                (string) config('services.apple.jwks_url'),
+                [(string) config('services.apple.issuer')],
+                (array) config('services.apple.audiences'),
+            );
+        } catch (Throwable $e) {
+            return $this->rejectIdentityToken('Apple', $e);
+        }
 
-        if (!$user) {
-            $email = $validated['email'] ?? ($validated['apple_user_id'] . '@appleid.apple.com');
+        $appleUserId = $claims['sub'];
+
+        // Apple returns `email` only on the first authorization for an app, so a
+        // returning user is matched by subject alone.
+        $user = User::where('apple_user_id', $appleUserId)->first();
+
+        if (! $user) {
+            // Apple's private relay addresses are stable per app, so this
+            // synthesized address stays unique when the real one is withheld.
+            $email = $claims['email'] ?? ($appleUserId.'@appleid.apple.com');
+
             $user = User::firstOrCreate(
                 ['email' => $email],
                 [
                     'name' => $validated['name'] ?? 'Apple User',
                     'password' => Hash::make(uniqid('apple_', true)),
-                    'apple_user_id' => $validated['apple_user_id'],
+                    'apple_user_id' => $appleUserId,
                     'current_weight_kg' => 65,
                     'height_cm' => 170,
                     'activity_level' => 'sedentary',
                 ]
             );
 
-            if (!$user->dailyGoal) {
+            // firstOrCreate returns an existing row when the address already
+            // belongs to a password account. Linking the Apple subject to it is
+            // safe here and only here, because Apple asserted this address.
+            if (! $user->apple_user_id) {
+                $user->forceFill(['apple_user_id' => $appleUserId])->save();
+            }
+
+            if (! $user->dailyGoal) {
                 $goalData = $this->goalCalculator->calculate($user, 'maintain');
                 $user->dailyGoal()->create($goalData);
             }
@@ -136,31 +172,73 @@ class AuthController extends Controller
     }
 
     /**
-     * Sign in or register with Google ID token.
+     * Sign in or register with Google Sign-In.
+     *
+     * As with Apple, identity comes from the verified token. Accounts are keyed
+     * on the Google subject rather than the email address, so a Google account
+     * that merely shares an address with an existing password account cannot
+     * take it over.
      */
     public function googleLogin(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'google_user_id' => 'required|string',
-            'email' => 'required|email',
-            'name' => 'nullable|string',
-            'avatar_url' => 'nullable|string',
+            'id_token' => 'required|string',
         ]);
 
-        $user = User::where('email', $validated['email'])->first();
+        try {
+            $claims = $this->tokenVerifier->verify(
+                $validated['id_token'],
+                (string) config('services.google.jwks_url'),
+                (array) config('services.google.issuers'),
+                (array) config('services.google.audiences'),
+            );
+        } catch (Throwable $e) {
+            return $this->rejectIdentityToken('Google', $e);
+        }
 
-        if (!$user) {
-            $user = User::create([
-                'email' => $validated['email'],
-                'name' => $validated['name'] ?? 'Google User',
-                'password' => Hash::make(uniqid('google_', true)),
-                'avatar_url' => $validated['avatar_url'] ?? null,
-                'current_weight_kg' => 65,
-                'height_cm' => 170,
-                'activity_level' => 'sedentary',
-            ]);
+        $googleUserId = $claims['sub'];
+        $user = User::where('google_user_id', $googleUserId)->first();
 
-            if (!$user->dailyGoal) {
+        if (! $user) {
+            $email = $claims['email'] ?? null;
+
+            if (! is_string($email) || $email === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Tài khoản Google không cung cấp địa chỉ email.',
+                ], 422);
+            }
+
+            // Google marks whether it has verified the address. An unverified
+            // address proves nothing about who owns it, so it must not be used
+            // to attach to an existing account.
+            $emailVerified = filter_var($claims['email_verified'] ?? false, FILTER_VALIDATE_BOOL);
+            $existing = User::where('email', $email)->first();
+
+            if ($existing && ! $emailVerified) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Google chưa xác minh địa chỉ email này.',
+                ], 422);
+            }
+
+            if ($existing) {
+                $user = $existing;
+                $user->forceFill(['google_user_id' => $googleUserId])->save();
+            } else {
+                $user = User::create([
+                    'email' => $email,
+                    'name' => $claims['name'] ?? 'Google User',
+                    'password' => Hash::make(uniqid('google_', true)),
+                    'avatar_url' => $claims['picture'] ?? null,
+                    'google_user_id' => $googleUserId,
+                    'current_weight_kg' => 65,
+                    'height_cm' => 170,
+                    'activity_level' => 'sedentary',
+                ]);
+            }
+
+            if (! $user->dailyGoal) {
                 $goalData = $this->goalCalculator->calculate($user, 'maintain');
                 $user->dailyGoal()->create($goalData);
             }
@@ -175,6 +253,24 @@ class AuthController extends Controller
             'user' => $user->load('dailyGoal'),
             'is_premium' => $user->isPremium(),
         ]);
+    }
+
+    /**
+     * Refuse a sign-in whose identity token did not verify.
+     *
+     * The reason is logged rather than returned: telling a caller which check
+     * failed helps forge a token that passes the next one.
+     */
+    private function rejectIdentityToken(string $provider, Throwable $e): JsonResponse
+    {
+        Log::warning("{$provider} sign-in rejected", [
+            'reason' => $e->getMessage(),
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Phiên đăng nhập không hợp lệ. Vui lòng thử lại.',
+        ], 401);
     }
 
     /**
@@ -210,7 +306,7 @@ class AuthController extends Controller
     public function deleteAccount(Request $request): JsonResponse
     {
         $user = $request->user();
-        
+
         // Revoke all tokens
         $user->tokens()->delete();
 

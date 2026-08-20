@@ -15,7 +15,9 @@ use Illuminate\Http\Request;
 class MealController extends Controller
 {
     protected UploadService $uploadService;
+
     protected AiVisionService $aiVisionService;
+
     protected NutritionValidator $validator;
 
     public function __construct(
@@ -178,8 +180,12 @@ class MealController extends Controller
             'foods.*.fat_g' => 'required|numeric',
         ]);
 
-        if (isset($validated['meal_type'])) $meal->meal_type = $validated['meal_type'];
-        if (isset($validated['notes'])) $meal->notes = $validated['notes'];
+        if (isset($validated['meal_type'])) {
+            $meal->meal_type = $validated['meal_type'];
+        }
+        if (isset($validated['notes'])) {
+            $meal->notes = $validated['notes'];
+        }
         $meal->save();
 
         if (isset($validated['foods'])) {

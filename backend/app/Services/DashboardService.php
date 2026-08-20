@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\MealLog;
 use App\Models\User;
 use Carbon\Carbon;
 
@@ -102,7 +101,7 @@ class DashboardService
         for ($i = 0; $i < 7; $i++) {
             $current = (clone $start)->addDays($i);
             $dateStr = $current->format('Y-m-d');
-            
+
             $dayCalories = (int) $user->mealLogs()
                 ->whereDate('logged_date', $dateStr)
                 ->where('status', 'completed')
@@ -146,7 +145,7 @@ class DashboardService
 
         // Check if logged today or yesterday to continue streak
         $hasToday = $user->mealLogs()->whereDate('logged_date', $checkDate->format('Y-m-d'))->where('status', 'completed')->exists();
-        if (!$hasToday) {
+        if (! $hasToday) {
             $checkDate->subDay();
         }
 
@@ -163,7 +162,9 @@ class DashboardService
                 break;
             }
 
-            if ($streak > 365) break; // upper bound safety
+            if ($streak > 365) {
+                break;
+            } // upper bound safety
         }
 
         return max(1, $streak);

@@ -14,10 +14,11 @@ class UploadService
     public function uploadMealImage(UploadedFile|string $file): string
     {
         $disk = 'public';
-        $filename = 'meals/' . Str::uuid() . '.jpg';
+        $filename = 'meals/'.Str::uuid().'.jpg';
 
         if ($file instanceof UploadedFile) {
-            $path = $file->storeAs('meals', Str::uuid() . '.' . $file->getClientOriginalExtension(), $disk);
+            $path = $file->storeAs('meals', Str::uuid().'.'.$file->getClientOriginalExtension(), $disk);
+
             return Storage::disk($disk)->url($path);
         }
 
@@ -26,6 +27,7 @@ class UploadService
             $cleanBase64 = preg_replace('/^data:image\/\w+;base64,/', '', $file);
             $imageData = base64_decode($cleanBase64);
             Storage::disk($disk)->put($filename, $imageData);
+
             return Storage::disk($disk)->url($filename);
         }
 
