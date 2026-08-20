@@ -21,7 +21,7 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose, onSuccess }) => {
-  const { theme, showToast, setUserProfile, setUserGoals } = useApp();
+  const { theme, showToast, setUserProfile, setUserGoals, refreshPremium } = useApp();
   const [loadingType, setLoadingType] = useState<'apple' | 'google' | null>(null);
 
   const handleAppleAuth = async () => {
@@ -47,6 +47,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose, onSucces
           }));
         }
       }
+
+      // Pull down whatever entitlement this account already owns.
+      await refreshPremium();
 
       triggerHaptic('success');
       showToast('Đăng nhập bằng Apple ID thành công!');
@@ -84,6 +87,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose, onSucces
           }));
         }
       }
+
+      // Pull down whatever entitlement this account already owns.
+      await refreshPremium();
 
       triggerHaptic('success');
       showToast('Đăng nhập bằng Google thành công!');

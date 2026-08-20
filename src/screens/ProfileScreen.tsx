@@ -33,7 +33,7 @@ interface ProfileScreenProps {
 }
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onNavigate }) => {
-  const { theme, themeMode, setThemeMode, userProfile, userGoals, showToast } = useApp();
+  const { theme, themeMode, setThemeMode, userProfile, userGoals, showToast, setIsPremium } = useApp();
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   const handleNav = (screen: string) => {
@@ -55,6 +55,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onNavigate
       showToast('Đã đăng xuất tài khoản thành công!');
     } catch (e) {
       showToast('Đã đăng xuất.');
+    } finally {
+      // The token is gone either way, so the entitlement must go with it.
+      setIsPremium(false);
     }
   };
 
@@ -86,6 +89,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onNavigate
           onPress: async () => {
             try {
               await apiClient.deleteAccount();
+              setIsPremium(false);
               triggerHaptic('success');
               showToast('Tài khoản và dữ liệu đã được xóa hoàn toàn.');
             } catch (e: any) {

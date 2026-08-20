@@ -8,7 +8,8 @@ import { triggerHaptic } from '../../utils/haptics';
 import { apiClient } from '../../services/apiClient';
 import { isAppleSignInSupported, signInWithApple } from '../../services/appleAuth';
 import { signInWithGoogle } from '../../services/googleAuth';
-import { useIAP, getAvailablePurchases, ErrorCode } from 'expo-iap';
+import { useIAP, ErrorCode } from 'expo-iap';
+import { syncPurchasesWithServer } from '../../services/iap';
 
 // 1.1 Splash Screen
 export const SplashScreen: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
@@ -71,7 +72,7 @@ const PLAN_SKUS = {
 type PlanId = keyof typeof PLAN_SKUS;
 
 export const PaywallScreen: React.FC<{ onClose: () => void; onUnlock: () => void }> = ({ onClose, onUnlock }) => {
-  const { theme, showToast, setIsPremium } = useApp() as any;
+  const { theme, showToast, setIsPremium } = useApp();
   const [selectedPlan, setSelectedPlan] = useState<PlanId>('yearly');
   const [loading, setLoading] = useState(false);
 
@@ -94,7 +95,7 @@ export const PaywallScreen: React.FC<{ onClose: () => void; onUnlock: () => void
 
         await finishTransaction({ purchase, isConsumable: false });
 
-        if (setIsPremium) setIsPremium(true);
+        setIsPremium(true);
         triggerHaptic('success');
         showToast('Chúc mừng! Bạn đã mở khoá CalTrack Pro thành công!');
         onUnlock();
@@ -150,12 +151,8 @@ export const PaywallScreen: React.FC<{ onClose: () => void; onUnlock: () => void
       setLoading(true);
       triggerHaptic('light');
 
-      const purchases = await getAvailablePurchases();
-      const tokens = purchases.map((p) => p.purchaseToken).filter(Boolean) as string[];
-
-      const res = await apiClient.restoreIapPurchases(tokens);
-      if (res.is_premium) {
-        if (setIsPremium) setIsPremium(true);
+      if (await syncPurchasesWithServer()) {
+        setIsPremium(true);
         triggerHaptic('success');
         showToast('Khôi phục gói mua thành công!');
         onClose();
@@ -262,7 +259,7 @@ export const PaywallScreen: React.FC<{ onClose: () => void; onUnlock: () => void
 
 // 1.18 Sign In Screen
 export const SignInScreen: React.FC<{ onComplete: () => void; onBack: () => void }> = ({ onComplete, onBack }) => {
-  const { theme, showToast, setUserProfile, setUserGoals } = useApp();
+  const { theme, showToast, setUserProfile, setUserGoals, refreshPremium } = useApp();
   const [loadingType, setLoadingType] = useState<'apple' | 'google' | null>(null);
 
   const handleAppleLogin = async () => {
@@ -284,6 +281,9 @@ export const SignInScreen: React.FC<{ onComplete: () => void; onBack: () => void
           }));
         }
       }
+      // Pull down whatever entitlement this account already owns.
+      await refreshPremium();
+
       triggerHaptic('success');
       showToast('Đăng nhập Apple thành công!');
       onComplete();
@@ -318,6 +318,9 @@ export const SignInScreen: React.FC<{ onComplete: () => void; onBack: () => void
           }));
         }
       }
+      // Pull down whatever entitlement this account already owns.
+      await refreshPremium();
+
       triggerHaptic('success');
       showToast('Đăng nhập Google thành công!');
       onComplete();

@@ -116,7 +116,6 @@ export interface UserProfile {
   activityLevel: 'sedentary' | 'light' | 'moderate' | 'very_active';
   goal: 'lose' | 'maintain' | 'gain';
   dietType: 'standard' | 'vegetarian' | 'vegan' | 'keto';
-  isPro: boolean;
   proExpiresAt?: string;
   scanQuotaRemaining: number;
   referralCode: string;

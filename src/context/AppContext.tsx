@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ThemeMode,
@@ -11,6 +11,8 @@ import {
   Achievement
 } from '../types';
 import { triggerHaptic } from '../utils/haptics';
+import { apiClient } from '../services/apiClient';
+import { syncPurchasesWithServer } from '../services/iap';
 import { LightTheme, DarkTheme, AppTheme } from '../constants/theme';
 
 export interface ToastItem {
@@ -39,6 +41,10 @@ interface AppContextType {
   exercises: ExerciseEntry[];
   achievements: Achievement[];
   savedMeals: FoodItem[];
+
+  isPremium: boolean;
+  setIsPremium: (v: boolean) => void;
+  refreshPremium: () => Promise<void>;
 
   toasts: ToastItem[];
   showToast: (message: string, type?: 'success' | 'error' | 'undo' | 'info', undoAction?: () => void) => void;
@@ -98,7 +104,6 @@ const DEFAULT_PROFILE: UserProfile = {
   activityLevel: 'moderate',
   goal: 'lose',
   dietType: 'standard',
-  isPro: true,
   scanQuotaRemaining: 10,
   referralCode: 'CAL89X',
   referredCount: 3,
@@ -189,6 +194,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [achievements, setAchievements] = useState<Achievement[]>(INITIAL_ACHIEVEMENTS);
   const [savedMeals, setSavedMeals] = useState<FoodItem[]>([INITIAL_FOOD_LOGS[0], INITIAL_FOOD_LOGS[1]]);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [isPremium, setIsPremium] = useState(false);
+
+  /**
+   * The server is the authority on entitlement, but it can fall behind when a
+   * renewal notification from Apple goes missing. StoreKit still holds the
+   * current transaction on the device, so replay it whenever the server says no.
+   */
+  const refreshPremium = useCallback(async () => {
+    if (!(await apiClient.getToken())) {
+      setIsPremium(false);
+      return;
+    }
+
+    try {
+      const { is_premium } = await apiClient.getIapStatus();
+      if (is_premium) {
+        setIsPremium(true);
+        return;
+      }
+    } catch (e) {
+      // Offline: keep whatever we last knew rather than locking a payer out.
+      return;
+    }
+
+    try {
+      setIsPremium(await syncPurchasesWithServer());
+    } catch (e) {
+      setIsPremium(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshPremium();
+  }, [refreshPremium]);
 
   // 1. Initial Load from AsyncStorage
   useEffect(() => {
@@ -524,6 +563,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         exercises,
         achievements,
         savedMeals,
+        isPremium,
+        setIsPremium,
+        refreshPremium,
         toasts,
         showToast,
         removeToast,
