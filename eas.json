@@ -9,31 +9,50 @@
       "distribution": "internal",
       "ios": {
         "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "development"
       }
     },
     "preview": {
       "distribution": "internal",
+      "autoIncrement": true,
       "ios": {
         "simulator": false
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "staging",
+        "EXPO_PUBLIC_API_URL": "https://staging.REPLACE-ME.com/api"
       }
     },
     "production": {
       "autoIncrement": true,
       "ios": {
-        "bundleIdentifier": "com.caltrack.app"
+        "bundleIdentifier": "com.vin.calorielq"
       },
       "android": {
         "buildType": "app-bundle",
-        "package": "com.caltrack.app"
+        "package": "com.vin.calorielq"
+      },
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_API_URL": "https://REPLACE-ME.com/api"
       }
     }
   },
   "submit": {
     "production": {
       "ios": {
-        "appleId": "apple-developer@caltrack.ai",
-        "ascAppId": "6470000000",
-        "appleTeamId": "TEAMID1234"
+        "appleId": "REPLACE-ME@your-apple-id.com",
+        "ascAppId": "REPLACE-ME",
+        "appleTeamId": "REPLACE-ME"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-play-key.json",
+        "track": "internal"
       }
     }
   }
