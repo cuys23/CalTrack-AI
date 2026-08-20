@@ -1,63 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, ScrollView } from 'react-native';
-import { Mic, Check, Sparkles, Plus, Minus, Volume2 } from 'lucide-react-native';
+import { Check, Sparkles, Plus, Minus } from 'lucide-react-native';
 import { useApp } from '../../context/AppContext';
 import { FoodItem } from '../../types';
 import { AiFoodEngine } from '../../services/aiFoodEngine';
 import { triggerHaptic } from '../../utils/haptics';
-
-// 2.7 Voice Log Sheet (Waveform & Speech)
-export const VoiceLogSheet: React.FC<{ onResult: (food: FoodItem) => void; onClose: () => void }> = ({ onResult, onClose }) => {
-  const { theme } = useApp();
-  const [isRecording, setIsRecording] = useState(false);
-  const [transcript, setTranscript] = useState('');
-
-  const handleToggleRecord = async () => {
-    triggerHaptic('heavy');
-    if (!isRecording) {
-      setIsRecording(true);
-      setTranscript('Đang lắng nghe: "1 bát bún bò Huế và 1 ly trà đá..."');
-      setTimeout(async () => {
-        setIsRecording(false);
-        const food = await AiFoodEngine.parseNaturalLanguageText('Bún bò Huế');
-        onResult(food);
-      }, 2500);
-    } else {
-      setIsRecording(false);
-    }
-  };
-
-  return (
-    <View style={[styles.sheetContainer, { backgroundColor: theme.surface }]}>
-      <Text style={{ fontSize: 18, fontWeight: '800', color: theme.text, textAlign: 'center', marginBottom: 6 }}>
-        Ghi nhận bằng giọng nói
-      </Text>
-      <Text style={{ fontSize: 13, color: theme.textSecondary, textAlign: 'center', marginBottom: 20 }}>
-        Nói món ăn bạn vừa dùng (VD: "Sáng nay ăn 1 bát phở bò tái ít bánh")
-      </Text>
-
-      {/* Mic Button & Waveform Animation */}
-      <View style={{ alignItems: 'center', marginVertical: 14 }}>
-        <TouchableOpacity
-          onPress={handleToggleRecord}
-          style={[styles.micCircle, { backgroundColor: isRecording ? theme.danger : theme.accent }]}
-        >
-          <Mic size={32} color={theme.accentFg} />
-        </TouchableOpacity>
-
-        <Text style={{ color: isRecording ? theme.danger : theme.textSecondary, fontSize: 13, fontWeight: '700', marginTop: 14 }}>
-          {isRecording ? 'Đang ghi âm... Chạm để dừng' : 'Chạm vào mic để bắt đầu nói'}
-        </Text>
-      </View>
-
-      {transcript !== '' && (
-        <View style={[styles.transcriptBox, { backgroundColor: theme.surfaceAlt, borderColor: theme.border }]}>
-          <Text style={{ color: theme.text, fontSize: 14, fontStyle: 'italic' }}>{transcript}</Text>
-        </View>
-      )}
-    </View>
-  );
-};
 
 // 2.5 Fix Result Sheet ("AI đoán chưa đúng?")
 export const FixResultSheet: React.FC<{

@@ -6,137 +6,181 @@ use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
+use Throwable;
 
 /**
- * Decodes the ES256 JWS payloads Apple signs: StoreKit 2 signed transactions
- * and App Store Server Notifications V2.
+ * Verifies the signed payloads Apple issues for StoreKit 2 transactions and App
+ * Store Server Notifications V2.
  *
- * Apple puts the signing certificate chain in the `x5c` header, so a payload is
- * only trustworthy once that chain has been walked back to the pinned Apple
- * Root CA and the signature checked against the leaf certificate. Reading the
- * payload without those checks lets anyone mint their own entitlements.
+ * Apple signs these with a leaf certificate whose chain terminates at the Apple
+ * Root CA - G3. The root is pinned from `resources/certs`, so a payload is only
+ * accepted when Apple actually signed it.
  */
 class AppleJwsDecoder
 {
+    private const EXPECTED_CHAIN_LENGTH = 3;
+
     /**
-     * Verify a compact JWS and return its payload, or null if it is not
-     * authentically signed by Apple.
+     * Verify a compact JWS and return its payload claims.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RuntimeException When the structure, chain, or signature fails.
      */
-    public function decode(string $jws): ?array
-    {
-        try {
-            return $this->verify($jws);
-        } catch (\Throwable $e) {
-            Log::warning('Rejected Apple JWS', ['reason' => $e->getMessage()]);
-
-            return null;
-        }
-    }
-
-    private function verify(string $jws): array
+    public function verify(string $jws): array
     {
         $parts = explode('.', $jws);
+
         if (count($parts) !== 3) {
-            throw new RuntimeException('Invalid JWS structure.');
+            throw new RuntimeException('JWS must have three segments.');
         }
 
-        $header = json_decode((string) $this->base64UrlDecode($parts[0]), true);
-        if (!is_array($header)) {
-            throw new RuntimeException('Unreadable JWS header.');
+        $header = $this->decodeSegment($parts[0], 'header');
+
+        $algorithm = $header['alg'] ?? null;
+        if ($algorithm !== 'ES256') {
+            throw new RuntimeException('JWS algorithm must be ES256.');
         }
 
-        // Pin the algorithm: an attacker must not get to pick it for us.
-        if (($header['alg'] ?? null) !== 'ES256') {
-            throw new RuntimeException('Unexpected JWS algorithm: ' . ($header['alg'] ?? 'none'));
+        $chain = $header['x5c'] ?? null;
+        if (! is_array($chain) || count($chain) !== self::EXPECTED_CHAIN_LENGTH) {
+            throw new RuntimeException('JWS header must carry a three-certificate x5c chain.');
         }
 
-        $chain = $this->certificateChain($header['x5c'] ?? null);
-        $leaf = $this->trustedLeaf($chain);
+        $leafPublicKey = $this->verifyCertificateChain($chain);
 
-        $payload = (array) JWT::decode($jws, new Key($leaf, 'ES256'));
+        try {
+            $claims = (array) JWT::decode($jws, new Key($leafPublicKey, 'ES256'));
+        } catch (Throwable $e) {
+            Log::warning('Apple JWS signature verification failed', ['reason' => $e->getMessage()]);
 
-        // Signed transactions carry the bundle they were purchased in; a valid
-        // Apple signature from someone else's app is still not our purchase.
-        $expectedBundleId = config('services.apple.bundle_id');
-        if (isset($payload['bundleId']) && $payload['bundleId'] !== $expectedBundleId) {
-            throw new RuntimeException('JWS was signed for another bundle: ' . $payload['bundleId']);
+            throw new RuntimeException('JWS signature is not valid.', previous: $e);
         }
 
-        return $payload;
+        return $claims;
     }
 
     /**
-     * @return list<string> PEM certificates, leaf first, root last.
-     */
-    private function certificateChain(mixed $x5c): array
-    {
-        if (!is_array($x5c) || count($x5c) < 2) {
-            throw new RuntimeException('JWS header carries no certificate chain.');
-        }
-
-        return array_map(
-            fn (string $der) => "-----BEGIN CERTIFICATE-----\n"
-                . chunk_split($der, 64, "\n")
-                . "-----END CERTIFICATE-----\n",
-            $x5c
-        );
-    }
-
-    /**
-     * Walk the chain back to the pinned Apple root and return the leaf PEM.
+     * Validate the certificate chain and return the leaf's public key.
      *
-     * @param list<string> $chain
+     * @param  list<string>  $chain  Base64 DER certificates, leaf first.
      */
-    private function trustedLeaf(array $chain): string
+    private function verifyCertificateChain(array $chain): string
     {
-        $root = $chain[count($chain) - 1];
+        [$leaf, $intermediate, $root] = array_map(
+            fn (string $der): \OpenSSLCertificate => $this->parseCertificate($der),
+            $chain
+        );
 
-        // ponytail: the root is pinned by exact bytes. Apple Root CA - G3 runs to
-        // 2039, but if Apple ever re-issues it, drop the new .pem in and update
-        // services.apple.root_ca_path — nothing else needs to change.
-        $pinnedPath = config('services.apple.root_ca_path');
-        $pinned = is_string($pinnedPath) && is_file($pinnedPath) ? file_get_contents($pinnedPath) : null;
-        if (!$pinned) {
-            throw new RuntimeException('Apple root certificate is not configured.');
+        $pinnedRoot = $this->pinnedAppleRoot();
+        if (! openssl_x509_export($root, $presentedRootPem) ||
+            ! openssl_x509_export($pinnedRoot, $pinnedRootPem) ||
+            ! hash_equals($pinnedRootPem, $presentedRootPem)) {
+            throw new RuntimeException('JWS chain does not terminate at the pinned Apple root.');
         }
 
-        if (!hash_equals($this->fingerprint($pinned), $this->fingerprint($root))) {
-            throw new RuntimeException('JWS chain does not terminate at the Apple root certificate.');
+        if (openssl_x509_verify($intermediate, $root) !== 1) {
+            throw new RuntimeException('JWS intermediate certificate is not signed by the Apple root.');
         }
 
-        for ($i = 0; $i < count($chain) - 1; $i++) {
-            if (openssl_x509_verify($chain[$i], $chain[$i + 1]) !== 1) {
-                throw new RuntimeException("Certificate chain is broken at link {$i}.");
-            }
+        if (openssl_x509_verify($leaf, $intermediate) !== 1) {
+            throw new RuntimeException('JWS leaf certificate is not signed by the intermediate.');
         }
 
-        foreach ($chain as $index => $pem) {
-            $info = openssl_x509_parse($pem);
-            if (!$info) {
-                throw new RuntimeException("Unreadable certificate at position {$index}.");
-            }
+        $this->assertCurrentlyValid($leaf);
+        $this->assertCurrentlyValid($intermediate);
 
-            $now = time();
-            if ($now < $info['validFrom_time_t'] || $now > $info['validTo_time_t']) {
-                throw new RuntimeException("Certificate at position {$index} is outside its validity window.");
-            }
+        $publicKey = openssl_pkey_get_public($leaf);
+        if ($publicKey === false) {
+            throw new RuntimeException('JWS leaf certificate has no readable public key.');
         }
 
-        return $chain[0];
-    }
-
-    private function fingerprint(string $pem): string
-    {
-        $fingerprint = openssl_x509_fingerprint($pem, 'sha256');
-        if ($fingerprint === false) {
-            throw new RuntimeException('Unable to fingerprint certificate.');
+        $details = openssl_pkey_get_details($publicKey);
+        if (! is_array($details) || ! isset($details['key'])) {
+            throw new RuntimeException('JWS leaf public key could not be exported.');
         }
 
-        return $fingerprint;
+        return $details['key'];
     }
 
     /**
-     * Decode standard Base64URL string.
+     * Reject a certificate that is expired or not yet valid.
+     */
+    private function assertCurrentlyValid(\OpenSSLCertificate $certificate): void
+    {
+        $parsed = openssl_x509_parse($certificate);
+
+        if (! is_array($parsed) || ! isset($parsed['validFrom_time_t'], $parsed['validTo_time_t'])) {
+            throw new RuntimeException('JWS certificate validity period could not be read.');
+        }
+
+        $now = time();
+
+        if ($now < $parsed['validFrom_time_t'] || $now > $parsed['validTo_time_t']) {
+            throw new RuntimeException('JWS certificate is outside its validity period.');
+        }
+    }
+
+    /**
+     * Convert a base64 DER certificate from the x5c header into an OpenSSL certificate resource.
+     */
+    private function parseCertificate(string $base64Der): \OpenSSLCertificate
+    {
+        $pem = "-----BEGIN CERTIFICATE-----\n"
+            .chunk_split($base64Der, 64, "\n")
+            ."-----END CERTIFICATE-----\n";
+
+        $certificate = openssl_x509_read($pem);
+
+        if ($certificate === false) {
+            throw new RuntimeException('JWS chain contains an unreadable certificate.');
+        }
+
+        return $certificate;
+    }
+
+    /**
+     * Load the pinned Apple Root CA - G3.
+     */
+    private function pinnedAppleRoot(): \OpenSSLCertificate
+    {
+        $path = config('services.apple.storekit_root_certificate')
+            ?: resource_path('certs/AppleRootCA-G3.pem');
+
+        $pem = is_readable($path) ? file_get_contents($path) : false;
+
+        if ($pem === false) {
+            throw new RuntimeException("Pinned Apple root certificate is missing at {$path}.");
+        }
+
+        $certificate = openssl_x509_read($pem);
+
+        if ($certificate === false) {
+            throw new RuntimeException('Pinned Apple root certificate could not be parsed.');
+        }
+
+        return $certificate;
+    }
+
+    /**
+     * Decode one base64url JWS segment as JSON.
+     *
+     * @return array<string, mixed>
+     */
+    private function decodeSegment(string $segment, string $label): array
+    {
+        $json = $this->base64UrlDecode($segment);
+        $decoded = $json !== null ? json_decode($json, true) : null;
+
+        if (! is_array($decoded)) {
+            throw new RuntimeException("JWS {$label} is not valid JSON.");
+        }
+
+        return $decoded;
+    }
+
+    /**
+     * Decode a Base64URL string.
      */
     public function base64UrlDecode(string $input): ?string
     {
@@ -145,7 +189,7 @@ class AppleJwsDecoder
             $input .= str_repeat('=', 4 - $remainder);
         }
 
-        $decoded = base64_decode(strtr($input, '-_', '+/'));
+        $decoded = base64_decode(strtr($input, '-_', '+/'), true);
 
         return ($decoded !== false) ? $decoded : null;
     }

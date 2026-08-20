@@ -10,8 +10,12 @@ import {
 } from 'react-native';
 import { X, Sparkles } from 'lucide-react-native';
 import { useApp } from '../context/AppContext';
-import { isAppleSignInSupported, signInWithApple } from '../services/appleAuth';
-import { signInWithGoogle } from '../services/googleAuth';
+import {
+  signInWithApple,
+  signInWithGoogle,
+  applyAuthResult,
+  wasCanceled,
+} from '../services/socialAuth';
 import { triggerHaptic } from '../utils/haptics';
 
 interface AuthModalProps {
@@ -21,81 +25,37 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose, onSuccess }) => {
-  const { theme, showToast, setUserProfile, setUserGoals } = useApp();
+  const { theme, showToast, setUserProfile, setUserGoals, setIsPremium } = useApp();
   const [loadingType, setLoadingType] = useState<'apple' | 'google' | null>(null);
 
-  const handleAppleAuth = async () => {
+  const runSignIn = async (
+    provider: 'apple' | 'google',
+    label: string,
+    signIn: () => Promise<any>
+  ) => {
     try {
-      setLoadingType('apple');
+      setLoadingType(provider);
       triggerHaptic('medium');
 
-      const res = await signInWithApple();
-      if (!res) return; // user dismissed the Apple sheet
+      const outcome = await signIn();
+      if (wasCanceled(outcome)) return;
 
-      if (res.user) {
-        setUserProfile(prev => ({
-          ...prev,
-          name: res.user.name || prev.name,
-        }));
-        if (res.user.daily_goal) {
-          setUserGoals(prev => ({
-            ...prev,
-            targetCalories: res.user.daily_goal.target_calories || prev.targetCalories,
-            targetProtein: res.user.daily_goal.protein_g || prev.targetProtein,
-            targetCarbs: res.user.daily_goal.carbs_g || prev.targetCarbs,
-            targetFat: res.user.daily_goal.fat_g || prev.targetFat,
-          }));
-        }
-      }
+      applyAuthResult(outcome, setUserProfile, setUserGoals, setIsPremium);
 
       triggerHaptic('success');
-      showToast('Đăng nhập bằng Apple ID thành công!');
+      showToast(`Đăng nhập bằng ${label} thành công!`);
       onClose();
       if (onSuccess) onSuccess();
     } catch (e: any) {
       triggerHaptic('error');
-      Alert.alert('Lỗi đăng nhập', e.message || 'Không thể đăng nhập bằng Apple.');
+      Alert.alert('Lỗi đăng nhập', e.message || `Không thể đăng nhập bằng ${label}.`);
     } finally {
       setLoadingType(null);
     }
   };
 
-  const handleGoogleAuth = async () => {
-    try {
-      setLoadingType('google');
-      triggerHaptic('medium');
-
-      const res = await signInWithGoogle();
-      if (!res) return; // user dismissed the Google picker
-
-      if (res.user) {
-        setUserProfile(prev => ({
-          ...prev,
-          name: res.user.name || prev.name,
-          avatarUrl: res.user.avatar_url || prev.avatarUrl,
-        }));
-        if (res.user.daily_goal) {
-          setUserGoals(prev => ({
-            ...prev,
-            targetCalories: res.user.daily_goal.target_calories || prev.targetCalories,
-            targetProtein: res.user.daily_goal.protein_g || prev.targetProtein,
-            targetCarbs: res.user.daily_goal.carbs_g || prev.targetCarbs,
-            targetFat: res.user.daily_goal.fat_g || prev.targetFat,
-          }));
-        }
-      }
-
-      triggerHaptic('success');
-      showToast('Đăng nhập bằng Google thành công!');
-      onClose();
-      if (onSuccess) onSuccess();
-    } catch (e: any) {
-      triggerHaptic('error');
-      Alert.alert('Lỗi đăng nhập', e.message || 'Không thể đăng nhập bằng Google.');
-    } finally {
-      setLoadingType(null);
-    }
-  };
+  const handleAppleAuth = () => runSignIn('apple', 'Apple ID', signInWithApple);
+  const handleGoogleAuth = () => runSignIn('google', 'Google', signInWithGoogle);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -105,7 +65,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose, onSucces
           <View style={styles.header}>
             <View style={styles.badge}>
               <Sparkles size={14} color="#10B981" />
-              <Text style={styles.badgeText}>CalTrack Cloud Sync</Text>
+              <Text style={styles.badgeText}>Tài khoản CalorieIQ</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <X size={20} color={theme.textSecondary} />
@@ -113,16 +73,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose, onSucces
           </View>
 
           <Text style={[styles.title, { color: theme.text }]}>
-            Đăng nhập vào CalTrack AI
+            Đăng nhập vào CalorieIQ
           </Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            Đồng bộ an toàn dữ liệu calo, bữa ăn và tiến trình tập luyện trên mọi thiết bị iOS.
+            Đăng nhập để lưu mục tiêu dinh dưỡng và quản lý gói CalorieIQ Pro của bạn.
           </Text>
 
           {/* Social Sign-In Buttons */}
           <View style={styles.btnGroup}>
             {/* Apple Sign-In Button (Guideline-compliant) */}
-            {isAppleSignInSupported && (
             <TouchableOpacity
               onPress={handleAppleAuth}
               disabled={loadingType !== null}
@@ -138,7 +97,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose, onSucces
                 </View>
               )}
             </TouchableOpacity>
-            )}
 
             {/* Google Sign-In Button */}
             <TouchableOpacity
@@ -160,7 +118,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ visible, onClose, onSucces
 
           {/* Privacy Note */}
           <Text style={[styles.disclaimer, { color: theme.textTertiary }]}>
-            Bằng việc tiếp tục, bạn đồng ý với Điều khoản sử dụng và Chính sách quyền riêng tư của CalTrack AI.
+            Bằng việc tiếp tục, bạn đồng ý với Điều khoản sử dụng và Chính sách quyền riêng tư của CalorieIQ.
           </Text>
         </View>
       </View>

@@ -22,14 +22,14 @@ class AiVisionService
         $apiKey = config('services.gemini.key', env('GEMINI_API_KEY'));
         $openAiKey = config('services.openai.key', env('OPENAI_API_KEY'));
 
-        if (!empty($apiKey)) {
+        if (! empty($apiKey)) {
             $geminiResult = $this->callGeminiVision($imageUrlOrBase64, $apiKey, $hint);
             if ($geminiResult) {
                 return $this->validator->validateAndSanitize($geminiResult);
             }
         }
 
-        if (!empty($openAiKey)) {
+        if (! empty($openAiKey)) {
             $openAiResult = $this->callOpenAiVision($imageUrlOrBase64, $openAiKey, $hint);
             if ($openAiResult) {
                 return $this->validator->validateAndSanitize($openAiResult);
@@ -46,22 +46,22 @@ class AiVisionService
     protected function callGeminiVision(string $image, string $apiKey, ?string $hint): ?array
     {
         try {
-            $systemPrompt = "Bạn là chuyên gia dinh dưỡng AI cao cấp cho ứng dụng CalTrack AI. "
-                . "Hãy phân tích hình ảnh món ăn, nhận diện chính xác các thành phần món ăn (đặc biệt các món ăn Việt Nam như Phở, Cơm tấm, Bún bò, Bánh mì, hoặc món ăn quốc tế). "
-                . "Trả về DUY NHẤT một JSON array chứa danh sách các món ăn với schema: "
-                . "[{\"name\": string, \"grams\": number, \"calories\": number, \"protein_g\": number, \"carbs_g\": number, \"fat_g\": number, \"confidence\": number (0.0 - 1.0), \"health_score\": number (1 - 100)}]. "
-                . ($hint ? "Gợi ý từ người dùng: " . $hint : "");
+            $systemPrompt = 'Bạn là chuyên gia dinh dưỡng AI cao cấp cho ứng dụng CalTrack AI. '
+                .'Hãy phân tích hình ảnh món ăn, nhận diện chính xác các thành phần món ăn (đặc biệt các món ăn Việt Nam như Phở, Cơm tấm, Bún bò, Bánh mì, hoặc món ăn quốc tế). '
+                .'Trả về DUY NHẤT một JSON array chứa danh sách các món ăn với schema: '
+                .'[{"name": string, "grams": number, "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number, "confidence": number (0.0 - 1.0), "health_score": number (1 - 100)}]. '
+                .($hint ? 'Gợi ý từ người dùng: '.$hint : '');
 
-            $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" . $apiKey;
+            $endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='.$apiKey;
 
             $payload = [
                 'contents' => [
                     [
                         'parts' => [
                             ['text' => $systemPrompt],
-                        ]
-                    ]
-                ]
+                        ],
+                    ],
+                ],
             ];
 
             if (str_starts_with($image, 'data:image')) {
@@ -72,17 +72,18 @@ class AiVisionService
                     'inline_data' => [
                         'mime_type' => $mimeType,
                         'data' => $base64Data,
-                    ]
+                    ],
                 ];
             }
 
             $response = Http::timeout(30)->post($endpoint, $payload);
             if ($response->successful()) {
                 $rawText = $response->json('candidates.0.content.parts.0.text', '');
+
                 return $this->extractJsonArray($rawText);
             }
         } catch (\Throwable $e) {
-            Log::error('Gemini Vision API error: ' . $e->getMessage());
+            Log::error('Gemini Vision API error: '.$e->getMessage());
         }
 
         return null;
@@ -94,8 +95,8 @@ class AiVisionService
     protected function callOpenAiVision(string $image, string $apiKey, ?string $hint): ?array
     {
         try {
-            $systemPrompt = "Phân tích món ăn và trả về DUY NHẤT một JSON array với schema: "
-                . "[{\"name\": string, \"grams\": number, \"calories\": number, \"protein_g\": number, \"carbs_g\": number, \"fat_g\": number, \"confidence\": number, \"health_score\": number}].";
+            $systemPrompt = 'Phân tích món ăn và trả về DUY NHẤT một JSON array với schema: '
+                .'[{"name": string, "grams": number, "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number, "confidence": number, "health_score": number}].';
 
             $response = Http::withToken($apiKey)->timeout(30)->post('https://api.openai.com/v1/chat/completions', [
                 'model' => 'gpt-4o',
@@ -104,10 +105,10 @@ class AiVisionService
                     [
                         'role' => 'user',
                         'content' => [
-                            ['type' => 'text', 'text' => "Nhận diện dinh dưỡng món ăn này: " . ($hint ?? '')],
+                            ['type' => 'text', 'text' => 'Nhận diện dinh dưỡng món ăn này: '.($hint ?? '')],
                             ['type' => 'image_url', 'image_url' => ['url' => $image]],
-                        ]
-                    ]
+                        ],
+                    ],
                 ],
                 'response_format' => ['type' => 'json_object'],
             ]);
@@ -115,10 +116,11 @@ class AiVisionService
             if ($response->successful()) {
                 $content = $response->json('choices.0.message.content');
                 $decoded = json_decode($content, true);
+
                 return $decoded['foods'] ?? $decoded['items'] ?? (isset($decoded[0]) ? $decoded : null);
             }
         } catch (\Throwable $e) {
-            Log::error('OpenAI Vision API error: ' . $e->getMessage());
+            Log::error('OpenAI Vision API error: '.$e->getMessage());
         }
 
         return null;
@@ -131,12 +133,16 @@ class AiVisionService
     {
         if (preg_match('/\[\s*\{.*\}\s*\]/s', $text, $matches)) {
             $decoded = json_decode($matches[0], true);
-            if (is_array($decoded)) return $decoded;
+            if (is_array($decoded)) {
+                return $decoded;
+            }
         }
 
         if (preg_match('/```json\s*(\[.*?\])\s*```/s', $text, $matches)) {
             $decoded = json_decode($matches[1], true);
-            if (is_array($decoded)) return $decoded;
+            if (is_array($decoded)) {
+                return $decoded;
+            }
         }
 
         return null;

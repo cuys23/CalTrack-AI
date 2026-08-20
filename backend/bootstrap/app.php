@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Middleware\AdminBasicAuth;
+use App\Http\Middleware\CheckPremium;
+use App\Http\Middleware\EnforceDailyScanQuota;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -14,7 +17,9 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            'check.premium' => \App\Http\Middleware\CheckPremium::class,
+            'check.premium' => CheckPremium::class,
+            'admin.auth' => AdminBasicAuth::class,
+            'scan.quota' => EnforceDailyScanQuota::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

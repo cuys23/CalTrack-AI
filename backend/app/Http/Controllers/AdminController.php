@@ -4,10 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\AppStoreNotification;
 use App\Models\Food;
-use App\Models\IapTransaction;
 use App\Models\MealLog;
 use App\Models\Subscription;
-use App\Models\SubscriptionProduct;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;

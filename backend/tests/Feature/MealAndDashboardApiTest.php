@@ -43,7 +43,7 @@ class MealAndDashboardApiTest extends TestCase
             ->assertJsonPath('meal.total_calories', 520);
 
         // 2. Fetch dashboard today
-        $dashResponse = $this->actingAs($user)->getJson('/api/dashboard?date=' . $today);
+        $dashResponse = $this->actingAs($user)->getJson('/api/dashboard?date='.$today);
         $dashResponse->assertStatus(200)
             ->assertJsonPath('data.summary.consumed_calories', 520)
             ->assertJsonPath('data.summary.remaining_calories', 1480);

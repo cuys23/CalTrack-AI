@@ -25,7 +25,7 @@
       },
       "env": {
         "EXPO_PUBLIC_APP_ENV": "staging",
-        "EXPO_PUBLIC_API_URL": "https://staging.REPLACE-ME.com/api"
+        "EXPO_PUBLIC_API_URL": "https://staging.caltrack.ai/api"
       }
     },
     "production": {
@@ -38,17 +38,17 @@
         "package": "com.vin.calorielq"
       },
       "env": {
-        "EXPO_PUBLIC_APP_ENV": "production",
-        "EXPO_PUBLIC_API_URL": "https://REPLACE-ME.com/api"
+        "EXPO_PUBLIC_API_URL": "https://api.caltrack.ai/api",
+        "EXPO_PUBLIC_APP_ENV": "production"
       }
     }
   },
   "submit": {
     "production": {
       "ios": {
-        "appleId": "REPLACE-ME@your-apple-id.com",
-        "ascAppId": "REPLACE-ME",
-        "appleTeamId": "REPLACE-ME"
+        "appleId": "appbrats99@gmail.com",
+        "ascAppId": "16857264462",
+        "appleTeamId": "KS362JT4QN"
       },
       "android": {
         "serviceAccountKeyPath": "./google-play-key.json",

@@ -35,6 +35,12 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
+google-play-key.json
+
+# Harness core maintenance binary
+scripts/bin/harness
+scripts/bin/harness.exe
 
 # typescript
 *.tsbuildinfo
@@ -42,7 +48,3 @@ yarn-error.*
 # generated native folders
 /ios
 /android
-
-# secrets
-.env
-google-play-key.json

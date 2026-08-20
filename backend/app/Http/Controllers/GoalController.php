@@ -20,7 +20,7 @@ class GoalController extends Controller
         $user = $request->user();
         $goal = $user->dailyGoal;
 
-        if (!$goal) {
+        if (! $goal) {
             $goalData = $this->goalCalculator->calculate($user, 'maintain');
             $goal = $user->dailyGoal()->create($goalData);
         }
@@ -62,7 +62,7 @@ class GoalController extends Controller
         $goalType = $request->input('goal_type', $user->dailyGoal?->goal_type ?? 'maintain');
 
         $goalData = $this->goalCalculator->calculate($user, $goalType);
-        
+
         $goal = $user->dailyGoal()->updateOrCreate(
             ['user_id' => $user->id],
             $goalData

@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+# A newer push makes an in-flight run for the same branch irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+
+    # The suite uses RefreshDatabase, so it needs a real database rather than
+    # an in-memory stand-in whose behaviour differs from production Postgres.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: caltrack_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: secret
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports: ['5432:5432']
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, mbstring, bcmath, gd, zip
+          coverage: none
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: backend/vendor
+          key: composer-${{ hashFiles('backend/composer.lock') }}
+          restore-keys: composer-
+
+      - run: composer validate --strict
+
+      - run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Run tests
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: caltrack_test
+          DB_USERNAME: postgres
+          DB_PASSWORD: secret
+          # Redis is not available here; the suite does not exercise the queue.
+          QUEUE_CONNECTION: sync
+          CACHE_STORE: array
+          SESSION_DRIVER: array
+        run: php artisan test
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+  # Style is reported separately and does not gate the build. The repository
+  # carries pre-existing violations in files unrelated to current work, and
+  # failing every run on them would only teach people to ignore the result.
+  style:
+    name: Style (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - run: composer install --no-interaction --no-progress --prefer-dist
+
+      - run: ./vendor/bin/pint --test

@@ -160,57 +160,6 @@ export const SavedMealsScreen: React.FC<{ onSelectFood: (food: FoodItem) => void
   );
 };
 
-// 2.12 Recipe Import Screen
-export const RecipeImportScreen: React.FC<{ onImported: (food: FoodItem) => void; onBack: () => void }> = ({ onImported, onBack }) => {
-  const { theme, showToast } = useApp();
-  const [url, setUrl] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleImport = async () => {
-    if (!url.trim()) return;
-    setLoading(true);
-    triggerHaptic('medium');
-    setTimeout(() => {
-      setLoading(false);
-      showToast('Đã phân tích công thức từ liên kết!');
-      onBack();
-    }, 1500);
-  };
-
-  return (
-    <View style={[styles.container, { backgroundColor: theme.bg, padding: 20 }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.iconBtn}>
-          <ChevronLeft size={20} color={theme.text} />
-        </TouchableOpacity>
-        <Text style={[styles.screenTitle, { color: theme.text }]}>Nhập từ công thức</Text>
-        <View style={{ width: 36 }} />
-      </View>
-
-      <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <Text style={{ fontSize: 15, fontWeight: '700', color: theme.text }}>Dán liên kết công thức</Text>
-        <Text style={{ fontSize: 12, color: theme.textSecondary, marginVertical: 6 }}>
-          Hỗ trợ link video TikTok, Instagram Reels, bài viết blog ẩm thực...
-        </Text>
-
-        <TextInput
-          value={url}
-          onChangeText={setUrl}
-          placeholder="https://tiktok.com/@chef/video/..."
-          placeholderTextColor={theme.textTertiary}
-          style={[styles.input, { backgroundColor: theme.surfaceAlt, color: theme.text, borderColor: theme.border, marginTop: 8 }]}
-        />
-      </View>
-
-      <TouchableOpacity onPress={handleImport} disabled={loading} style={[styles.btnPrimary, { backgroundColor: theme.accent, marginTop: 20 }]}>
-        <Text style={{ color: theme.accentFg, fontWeight: '800' }}>
-          {loading ? 'AI đang bóc tách nguyên liệu...' : 'Phân tích công thức'}
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-};
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, marginTop: 40 },

@@ -35,23 +35,43 @@ return [
         ],
     ],
 
+    /*
+    | Sign in with Apple. `audiences` must list every client that may present a
+    | token: the iOS bundle identifier, plus the Services ID if a web or Android
+    | client is ever added. A token whose `aud` is absent from this list was
+    | issued for a different application and is rejected.
+    */
     'apple' => [
-        // Audiences accepted in a Sign in with Apple identityToken: the iOS bundle
-        // identifier, plus the Services ID if you ever add web/Android sign-in.
-        'client_ids' => array_filter(explode(',', (string) env('APPLE_CLIENT_IDS', 'com.vin.calorielq'))),
+        'jwks_url' => env('APPLE_JWKS_URL', 'https://appleid.apple.com/auth/keys'),
+        'issuer' => env('APPLE_TOKEN_ISSUER', 'https://appleid.apple.com'),
+        'audiences' => array_values(array_filter(
+            explode(',', (string) env('APPLE_AUDIENCES', 'com.vin.calorielq'))
+        )),
 
-        // Bundle identifier a signed StoreKit transaction must have been made in.
-        'bundle_id' => env('APPLE_BUNDLE_ID', 'com.vin.calorielq'),
-
-        // Root certificate every Apple JWS chain must terminate at.
-        'root_ca_path' => env('APPLE_ROOT_CA_PATH', resource_path('certs/AppleRootCA-G3.pem')),
+        // Root that StoreKit JWS chains must terminate at. Overridden only by
+        // tests, which pin a root they generate themselves.
+        'storekit_root_certificate' => env('APPLE_STOREKIT_ROOT_CERTIFICATE'),
     ],
 
+    /*
+    | Google Sign-In. `audiences` holds the OAuth client IDs issued by the
+    | Google Cloud console; iOS and Android each get their own, and both must be
+    | listed. Google signs tokens with `iss` of either form below.
+    */
     'google' => [
-        // OAuth client IDs accepted in a Google Sign-In id_token. The native SDK
-        // mints the token for the *web* client ID, so that one is required; add
-        // the iOS/Android client IDs if you ever call Google APIs directly.
-        'client_ids' => array_filter(explode(',', (string) env('GOOGLE_CLIENT_IDS'))),
+        'jwks_url' => env('GOOGLE_JWKS_URL', 'https://www.googleapis.com/oauth2/v3/certs'),
+        'issuers' => ['https://accounts.google.com', 'accounts.google.com'],
+        'audiences' => array_values(array_filter(
+            explode(',', (string) env('GOOGLE_OAUTH_CLIENT_IDS', ''))
+        )),
+    ],
+
+    /*
+    | AI Vision. Each scan is a paid call to the provider, so the per-account
+    | daily ceiling bounds the bill. Set to 0 to disable the cap entirely.
+    */
+    'ai_vision' => [
+        'daily_scan_limit' => (int) env('AI_VISION_DAILY_SCAN_LIMIT', 50),
     ],
 
     'gemini' => [

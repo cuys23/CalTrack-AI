@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AppStoreWebhookController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BarcodeController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GoalController;
 use App\Http\Controllers\IapController;
@@ -52,7 +53,7 @@ Route::middleware('throttle:10,1')->group(function () {
 |--------------------------------------------------------------------------
 */
 Route::middleware('auth:sanctum')->group(function () {
-    
+
     // User & Account Management
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
@@ -89,8 +90,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/meal/{id}', [MealController::class, 'destroy']);
     Route::post('/meal/quick-add', [MealController::class, 'quickAdd']);
 
-    // AI Vision Scan (Rate limited to 15 req/min)
-    Route::middleware('throttle:15,1')->group(function () {
+    // Barcode lookup (decision 0004). Not premium-gated: unlike AI scanning it
+    // costs nothing per call. Throttled because it calls a free public service
+    // on our behalf.
+    Route::middleware('throttle:30,1')->group(function () {
+        Route::get('/food/barcode/{barcode}', [BarcodeController::class, 'show'])
+            ->where('barcode', '[0-9]{8,14}');
+    });
+
+    // AI Vision Scan. Each call costs real money at the provider, so the
+    // entitlement is enforced here rather than only in the client — a paywall
+    // the API does not honour is decoration.
+    Route::middleware(['check.premium', 'scan.quota', 'throttle:15,1'])->group(function () {
         Route::post('/meal/analyze', [MealController::class, 'analyze']);
     });
 });

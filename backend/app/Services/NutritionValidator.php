@@ -22,7 +22,7 @@ class NutritionValidator
             $protein = max(0, min(300, (float) ($food['protein_g'] ?? $food['protein'] ?? 0)));
             $carbs = max(0, min(500, (float) ($food['carbs_g'] ?? $food['carbs'] ?? 0)));
             $fat = max(0, min(250, (float) ($food['fat_g'] ?? $food['fat'] ?? 0)));
-            
+
             // Calculate theoretical calories: 4 * P + 4 * C + 9 * F
             $calcCalories = (int) round(($protein * 4) + ($carbs * 4) + ($fat * 9));
             $providedCalories = (int) ($food['calories'] ?? $calcCalories);

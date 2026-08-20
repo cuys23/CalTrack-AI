@@ -12,7 +12,7 @@ class NutritionValidatorTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->validator = new NutritionValidator();
+        $this->validator = new NutritionValidator;
     }
 
     public function test_sanitizes_negative_and_missing_values(): void
@@ -26,7 +26,7 @@ class NutritionValidatorTest extends TestCase
                 'fat_g' => 2,
                 'calories' => 0, // Should be calculated as 30*4 + 2*9 = 138
                 'confidence' => 0.3, // Should become min 0.5
-            ]
+            ],
         ];
 
         $output = $this->validator->validateAndSanitize($input);
@@ -49,7 +49,7 @@ class NutritionValidatorTest extends TestCase
                 'fat_g' => 0.5,
                 'calories' => 200,
                 'confidence' => 0.95,
-            ]
+            ],
         ];
 
         $output = $this->validator->validateAndSanitize($input);

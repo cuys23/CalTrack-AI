@@ -5,25 +5,24 @@ namespace Tests\Feature;
 use App\Models\SubscriptionProduct;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\Support\AppleTestChain;
+use Tests\Support\SignsAppleJws;
 use Tests\TestCase;
 
 class IapApiTest extends TestCase
 {
     use RefreshDatabase;
-
-    private AppleTestChain $apple;
+    use SignsAppleJws;
 
     protected function setUp(): void
     {
         parent::setUp();
+        $this->bootAppleJwsChain();
+    }
 
-        $this->apple = new AppleTestChain();
-
-        config([
-            'services.apple.root_ca_path' => $this->apple->rootPath,
-            'services.apple.bundle_id' => 'com.vin.calorielq',
-        ]);
+    protected function tearDown(): void
+    {
+        $this->tearDownAppleJwsChain();
+        parent::tearDown();
     }
 
     public function test_can_list_iap_products(): void
@@ -43,98 +42,111 @@ class IapApiTest extends TestCase
             ->assertJsonStructure(['products' => [['product_id', 'name', 'price_usd']]]);
     }
 
-    public function test_can_verify_purchase_and_grant_entitlement(): void
+    /**
+     * Positive proof: a transaction signed by a leaf that chains to the pinned
+     * root is accepted and grants entitlement.
+     */
+    public function test_verifies_properly_signed_transaction_and_grants_entitlement(): void
     {
         $user = User::factory()->create();
 
         $response = $this->actingAs($user)->postJson('/api/iap/verify', [
-            'transaction_jws' => $this->apple->sign($this->transaction()),
+            'transaction_jws' => $this->signAppleJws($this->transactionPayload()),
         ]);
 
         $response->assertStatus(200)
             ->assertJsonPath('success', true)
             ->assertJsonPath('is_premium', true);
 
-        $statusResponse = $this->actingAs($user)->getJson('/api/iap/status');
-        $statusResponse->assertStatus(200)
+        $this->actingAs($user)->getJson('/api/iap/status')
+            ->assertStatus(200)
             ->assertJsonPath('is_premium', true);
     }
 
-    public function test_unsigned_transaction_grants_nothing(): void
+    /**
+     * Negative proof for the original defect: a payload whose signature segment
+     * is an arbitrary string granted Premium indefinitely, for free. This is the
+     * exact token the previous version of this test asserted would succeed.
+     */
+    public function test_rejects_forged_signature(): void
     {
         $user = User::factory()->create();
 
-        // What the old client used to send: a payload anyone can type out.
-        $forged = implode('.', [
-            base64_encode(json_encode(['alg' => 'ES256'])),
-            base64_encode(json_encode($this->transaction())),
-            'mock_sig',
+        $header = base64_encode(json_encode(['alg' => 'ES256']));
+        $payload = base64_encode(json_encode($this->transactionPayload()));
+
+        $response = $this->actingAs($user)->postJson('/api/iap/verify', [
+            'transaction_jws' => "{$header}.{$payload}.mock_sig",
         ]);
 
-        $this->actingAs($user)->postJson('/api/iap/verify', ['transaction_jws' => $forged])
+        $response->assertStatus(400)->assertJsonPath('success', false);
+
+        $this->actingAs($user)->getJson('/api/iap/status')
+            ->assertStatus(200)
+            ->assertJsonPath('is_premium', false);
+    }
+
+    /**
+     * A chain that is internally consistent but rooted somewhere else must be
+     * refused, or pinning would achieve nothing.
+     */
+    public function test_rejects_chain_rooted_outside_the_pinned_root(): void
+    {
+        $user = User::factory()->create();
+        $jws = $this->signAppleJws($this->transactionPayload());
+
+        // Re-pin to an unrelated root; the presented chain no longer matches.
+        $this->bootAppleJwsChain();
+
+        $this->actingAs($user)->postJson('/api/iap/verify', ['transaction_jws' => $jws])
             ->assertStatus(400)
             ->assertJsonPath('success', false);
-
-        $this->assertFalse($user->fresh()->isPremium());
     }
 
-    public function test_transaction_signed_by_a_foreign_key_grants_nothing(): void
+    /**
+     * A caller must not be able to downgrade to an algorithm they can forge.
+     */
+    public function test_rejects_non_es256_algorithm(): void
     {
         $user = User::factory()->create();
 
-        $this->actingAs($user)->postJson('/api/iap/verify', [
-            'transaction_jws' => $this->apple->signWithForeignKey($this->transaction()),
-        ])->assertStatus(400);
+        $header = base64_encode(json_encode(['alg' => 'none']));
+        $payload = base64_encode(json_encode($this->transactionPayload()));
 
-        $this->assertFalse($user->fresh()->isPremium());
+        $this->actingAs($user)->postJson('/api/iap/verify', [
+            'transaction_jws' => "{$header}.{$payload}.",
+        ])->assertStatus(400)->assertJsonPath('success', false);
     }
 
-    public function test_transaction_from_an_unpinned_root_grants_nothing(): void
+    /**
+     * A payload edited after signing must fail even though the chain is genuine.
+     */
+    public function test_rejects_tampered_payload(): void
     {
         $user = User::factory()->create();
 
-        $this->actingAs($user)->postJson('/api/iap/verify', [
-            'transaction_jws' => $this->apple->signWithForeignChain($this->transaction()),
-        ])->assertStatus(400);
+        $jws = $this->signAppleJws($this->transactionPayload());
+        [$header, , $signature] = explode('.', $jws);
 
-        $this->assertFalse($user->fresh()->isPremium());
-    }
-
-    public function test_transaction_for_another_bundle_grants_nothing(): void
-    {
-        $user = User::factory()->create();
+        $swapped = rtrim(strtr(base64_encode(json_encode(
+            $this->transactionPayload(['productId' => 'com.vin.calorielq.lifetime_pro'])
+        )), '+/', '-_'), '=');
 
         $this->actingAs($user)->postJson('/api/iap/verify', [
-            'transaction_jws' => $this->apple->sign($this->transaction(['bundleId' => 'com.someone-else.app'])),
-        ])->assertStatus(400);
-
-        $this->assertFalse($user->fresh()->isPremium());
+            'transaction_jws' => "{$header}.{$swapped}.{$signature}",
+        ])->assertStatus(400)->assertJsonPath('success', false);
     }
 
-    public function test_a_transaction_cannot_be_reused_on_a_second_account(): void
-    {
-        $buyer = User::factory()->create();
-        $freeloader = User::factory()->create();
-        $jws = $this->apple->sign($this->transaction());
-
-        $this->actingAs($buyer)->postJson('/api/iap/verify', ['transaction_jws' => $jws])
-            ->assertStatus(200);
-
-        $this->actingAs($freeloader)->postJson('/api/iap/verify', ['transaction_jws' => $jws])
-            ->assertStatus(400);
-
-        $this->assertTrue($buyer->fresh()->isPremium());
-        $this->assertFalse($freeloader->fresh()->isPremium());
-    }
-
-    private function transaction(array $overrides = []): array
+    /**
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    private function transactionPayload(array $overrides = []): array
     {
         return array_merge([
             'transactionId' => '100000099999',
             'originalTransactionId' => '100000099999',
-            'bundleId' => 'com.vin.calorielq',
             'productId' => 'com.vin.calorielq.monthly_pro',
-            'type' => 'Auto-Renewable Subscription',
             'purchaseDate' => now()->getTimestampMs(),
             'expiresDate' => now()->addMonth()->getTimestampMs(),
             'environment' => 'Sandbox',

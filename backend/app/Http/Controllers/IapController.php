@@ -52,7 +52,7 @@ class IapController extends Controller
                     'price_usd' => '69.99',
                     'trial_days' => 0,
                     'is_active' => true,
-                ]
+                ],
             ]);
         }
 

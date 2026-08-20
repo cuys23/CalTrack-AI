@@ -1,12 +1,13 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { X, Zap, ZapOff, Image as ImageIcon } from 'lucide-react-native';
 import { triggerHaptic } from '../utils/haptics';
+import { useTranslation } from '../i18n';
 
 interface CameraScanScreenProps {
-  onCapture: (imageUri: string, isBarcode?: boolean) => void;
+  onCapture: (imageUri: string, isBarcode?: boolean, imageBase64?: string) => void;
   onClose: () => void;
 }
 
@@ -15,22 +16,41 @@ export const CameraScanScreen: React.FC<CameraScanScreenProps> = ({ onCapture, o
   const cameraRef = useRef<any>(null);
   const [mode, setMode] = useState<'food' | 'barcode' | 'label'>('food');
   const [flash, setFlash] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const { t } = useTranslation();
 
   if (!permission) {
     return <View style={{ flex: 1, backgroundColor: '#000' }} />;
   }
 
   if (!permission.granted) {
+    // Once the user has denied twice, iOS stops showing the system prompt, so
+    // requestPermission() would do nothing at all. Send them to Settings, which
+    // is the only place the decision can still be changed.
+    const mustUseSettings = !permission.canAskAgain;
+
     return (
       <View style={styles.permissionBox}>
         <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 12 }}>
-          Cho phép CalTrack AI truy cập Máy ảnh để quét món ăn
+          {mustUseSettings
+            ? t('camera.permissionDenied')
+            : t('camera.permissionRequest')}
         </Text>
-        <TouchableOpacity onPress={requestPermission} style={styles.btnPrimary}>
-          <Text style={{ color: '#000', fontWeight: '800' }}>Cấp quyền Camera</Text>
+        {mustUseSettings && (
+          <Text style={{ color: '#aaa', fontSize: 13, textAlign: 'center', marginBottom: 16, lineHeight: 19 }}>
+            {t('camera.settingsGuide')}
+          </Text>
+        )}
+        <TouchableOpacity
+          onPress={mustUseSettings ? () => Linking.openSettings() : requestPermission}
+          style={styles.btnPrimary}
+        >
+          <Text style={{ color: '#000', fontWeight: '800' }}>
+            {mustUseSettings ? t('camera.openSettings') : t('camera.grantPermission')}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onClose} style={{ marginTop: 16 }}>
-          <Text style={{ color: '#aaa' }}>Đóng</Text>
+          <Text style={{ color: '#aaa' }}>{t('common.close')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -38,15 +58,28 @@ export const CameraScanScreen: React.FC<CameraScanScreenProps> = ({ onCapture, o
 
   const handleCapture = async () => {
     triggerHaptic('heavy');
-    if (cameraRef.current) {
-      try {
-        const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
-        if (photo?.uri) onCapture(photo.uri, mode === 'barcode');
-      } catch {
-        onCapture('https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80', mode === 'barcode');
+    setCaptureError(null);
+
+    if (!cameraRef.current) {
+      setCaptureError(t('camera.cameraNotReady'));
+      return;
+    }
+
+    try {
+      // base64 is what /meal/analyze expects; the uri is only for local preview.
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.8, base64: true });
+
+      if (!photo?.uri) {
+        // Previously this fell through to a hardcoded stock photo, so the user
+        // ended up logging a meal they had never photographed.
+        setCaptureError(t('camera.captureError'));
+        return;
       }
-    } else {
-      onCapture('https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80', mode === 'barcode');
+
+      onCapture(photo.uri, mode === 'barcode', photo.base64 ?? undefined);
+    } catch {
+      triggerHaptic('error');
+      setCaptureError(t('camera.captureError'));
     }
   };
 
@@ -55,10 +88,13 @@ export const CameraScanScreen: React.FC<CameraScanScreenProps> = ({ onCapture, o
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
-      quality: 0.8
+      quality: 0.8,
+      base64: true,
     });
     if (!res.canceled && res.assets[0]) {
-      onCapture(res.assets[0].uri);
+      onCapture(res.assets[0].uri, false, res.assets[0].base64 ?? undefined);
+    } else if (!res.canceled) {
+      setCaptureError(t('camera.galleryError'));
     }
   };
 
@@ -93,12 +129,18 @@ export const CameraScanScreen: React.FC<CameraScanScreenProps> = ({ onCapture, o
         </View>
       </View>
 
+      {captureError && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{captureError}</Text>
+        </View>
+      )}
+
       {/* Center Viewfinder */}
       <View style={styles.centerArea}>
         <View style={[styles.viewfinder, mode === 'barcode' && { height: 130 }]} />
         <View style={styles.modeHint}>
           <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>
-            {mode === 'food' ? 'Đặt món ăn trong khung' : mode === 'barcode' ? 'Đưa mã vạch vào giữa' : 'Chụp rõ bảng dinh dưỡng'}
+            {mode === 'food' ? t('camera.placeFood') : mode === 'barcode' ? t('camera.placeBarcode') : t('camera.captureLabel')}
           </Text>
         </View>
       </View>
@@ -116,7 +158,7 @@ export const CameraScanScreen: React.FC<CameraScanScreenProps> = ({ onCapture, o
               style={[styles.modeTab, mode === m && styles.modeTabActive]}
             >
               <Text style={{ fontSize: 12, fontWeight: '700', color: mode === m ? '#000' : '#fff' }}>
-                {m === 'food' ? 'Món ăn' : m === 'barcode' ? 'Mã vạch' : 'Nhãn vi chất'}
+                {m === 'food' ? t('camera.food') : m === 'barcode' ? t('camera.barcode') : t('camera.label')}
               </Text>
             </TouchableOpacity>
           ))}
@@ -144,5 +186,16 @@ const styles = StyleSheet.create({
   modeTab: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999 },
   modeTabActive: { backgroundColor: '#fff' },
   shutter: { width: 76, height: 76, borderRadius: 38, borderWidth: 4, borderColor: '#fff', padding: 4 },
-  shutterCore: { flex: 1, backgroundColor: '#fff', borderRadius: 35 }
+  shutterCore: { flex: 1, backgroundColor: '#fff', borderRadius: 35 },
+  errorBanner: {
+    position: 'absolute',
+    top: 96,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(229, 72, 77, 0.95)',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14
+  },
+  errorText: { color: '#fff', fontSize: 13, fontWeight: '700', textAlign: 'center' }
 });

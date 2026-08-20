@@ -12,7 +12,7 @@ class TdeeServiceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->tdeeService = new TdeeService();
+        $this->tdeeService = new TdeeService;
     }
 
     public function test_calculates_bmr_correctly_for_male(): void
@@ -34,7 +34,7 @@ class TdeeServiceTest extends TestCase
     public function test_calculates_tdee_based_on_activity_levels(): void
     {
         $bmr = 1600;
-        
+
         $this->assertEquals(1920, $this->tdeeService->calculateTdee($bmr, 'sedentary'));  // 1600 * 1.2
         $this->assertEquals(2200, $this->tdeeService->calculateTdee($bmr, 'light'));      // 1600 * 1.375
         $this->assertEquals(2480, $this->tdeeService->calculateTdee($bmr, 'moderate'));   // 1600 * 1.55

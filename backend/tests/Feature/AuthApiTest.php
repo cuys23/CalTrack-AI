@@ -38,8 +38,8 @@ class AuthApiTest extends TestCase
                         'protein_g',
                         'carbs_g',
                         'fat_g',
-                    ]
-                ]
+                    ],
+                ],
             ]);
 
         $this->assertDatabaseHas('users', ['email' => 'nguyenvana@example.com']);

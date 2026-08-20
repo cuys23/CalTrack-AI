@@ -6,6 +6,7 @@ import { CalorieRing } from '../components/CalorieRing';
 import { MacroRing } from '../components/CalorieRing';
 import { DateStrip, FoodCard } from '../components/FoodCard';
 import { triggerHaptic } from '../utils/haptics';
+import { useTranslation } from '../i18n';
 
 interface HomeScreenProps {
   onOpenScan: () => void;
@@ -27,6 +28,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onSelectFood
 }) => {
   const { theme, userProfile, userGoals, foodLogs, selectedDate, exercises } = useApp();
+  const { t } = useTranslation();
 
   const todayFoodLogs = (foodLogs || []).filter((f) => f && f.date === selectedDate);
   const totalCalories = todayFoodLogs.reduce((sum, f) => sum + (f.calories || 0), 0);
@@ -38,10 +40,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const totalBurned = todayExercises.reduce((sum, e) => sum + (e.caloriesBurned || 0), 0);
 
   const mealSections = [
-    { type: 'breakfast', title: 'Bữa sáng' },
-    { type: 'lunch', title: 'Bữa trưa' },
-    { type: 'dinner', title: 'Bữa tối' },
-    { type: 'snack', title: 'Ăn vặt & Đồ uống' }
+    { type: 'breakfast', titleKey: 'home.breakfast' },
+    { type: 'lunch', titleKey: 'home.lunch' },
+    { type: 'dinner', titleKey: 'home.dinner' },
+    { type: 'snack', titleKey: 'home.snack' }
   ];
 
   return (
@@ -52,7 +54,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <View style={styles.brandBadge}>
             <Text style={{ color: '#fff', fontWeight: '900', fontSize: 16 }}>C</Text>
           </View>
-          <Text style={[styles.brandTitle, { color: theme.text }]}>CalTrack AI</Text>
+          <Text style={[styles.brandTitle, { color: theme.text }]}>CalorieIQ</Text>
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -96,13 +98,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
         <View style={{ flex: 1, marginLeft: 16, gap: 6 }}>
           <Text style={{ fontSize: 13, color: theme.textSecondary }}>
-            Mục tiêu: <Text style={{ color: theme.text, fontWeight: '700' }}>{userGoals.targetCalories}</Text> kcal
+            {t('home.target')}: <Text style={{ color: theme.text, fontWeight: '700' }}>{userGoals.targetCalories}</Text> kcal
           </Text>
           <Text style={{ fontSize: 13, color: theme.textSecondary }}>
-            Đã nạp: <Text style={{ color: theme.text, fontWeight: '700' }}>{totalCalories}</Text> kcal
+            {t('home.consumed')}: <Text style={{ color: theme.text, fontWeight: '700' }}>{totalCalories}</Text> kcal
           </Text>
           <Text style={{ fontSize: 13, color: theme.success, fontWeight: '700' }}>
-            Đã đốt: +{totalBurned} kcal
+            {t('home.burned')}: +{totalBurned} kcal
           </Text>
         </View>
       </TouchableOpacity>
@@ -136,25 +138,32 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             <Footprints size={18} color={theme.fat} />
           </View>
           <View>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>8,432 bước chân</Text>
-            <Text style={{ fontSize: 12, color: theme.textSecondary }}>+{totalBurned} kcal đã đốt (Apple Health)</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: theme.text }}>
+              {todayExercises.length > 0
+                ? t('home.activitiesToday', { count: todayExercises.length })
+                : t('home.noActivities')}
+            </Text>
+            <Text style={{ fontSize: 12, color: theme.textSecondary }}>
+              {totalBurned > 0 ? t('home.burnedKcal', { count: totalBurned }) : t('home.tapToAdd')}
+            </Text>
           </View>
         </View>
         <ChevronRight size={16} color={theme.textTertiary} />
       </TouchableOpacity>
 
       {/* 6. Today Meals Section */}
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>Nhật ký ăn uống</Text>
+      <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('home.foodJournal')}</Text>
 
       {mealSections.map((sec) => {
         const items = todayFoodLogs.filter((f) => f.mealType === sec.type);
         const mealKcal = items.reduce((sum, f) => sum + f.calories, 0);
+        const title = t(sec.titleKey);
 
         return (
           <View key={sec.type} style={{ marginBottom: 14 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <Text style={{ fontSize: 15, fontWeight: '700', color: theme.text }}>
-                {sec.title} {mealKcal > 0 && <Text style={{ color: theme.textSecondary }}>({mealKcal} kcal)</Text>}
+                {title} {mealKcal > 0 && <Text style={{ color: theme.textSecondary }}>({mealKcal} kcal)</Text>}
               </Text>
 
               <TouchableOpacity
@@ -162,7 +171,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 style={[styles.addBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}
               >
                 <Plus size={13} color={theme.text} />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: theme.text, marginLeft: 3 }}>Thêm</Text>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: theme.text, marginLeft: 3 }}>{t('common.add')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -182,8 +191,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 onPress={onOpenScan}
                 style={[styles.emptyMeal, { borderColor: theme.border }]}
               >
-                <Text style={{ fontSize: 13, color: theme.textTertiary }}>Chưa ghi {sec.title.toLowerCase()}</Text>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: theme.accent }}>+ Quét món ngay</Text>
+                <Text style={{ fontSize: 13, color: theme.textTertiary }}>{t('home.noMeal', { meal: title.toLowerCase() })}</Text>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: theme.accent }}>{t('home.scanNow')}</Text>
               </TouchableOpacity>
             )}
           </View>

@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\AppStoreNotification;
 use App\Models\IapTransaction;
 use App\Models\Subscription;
-use App\Models\SubscriptionProduct;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -25,9 +24,16 @@ class SubscriptionService
      */
     public function verifyPurchase(User $user, string $signedTransactionJws): array
     {
-        $txData = $this->jwsDecoder->decode($signedTransactionJws);
-        if (!$txData) {
-            // Fallback for direct sandbox payloads if not formatted as full JWS
+        try {
+            $txData = $this->jwsDecoder->verify($signedTransactionJws);
+        } catch (\Throwable $e) {
+            // No fallback path. An unverified transaction grants no entitlement,
+            // because its payload is base64 the caller wrote themselves.
+            Log::warning('Rejected IAP purchase with unverifiable transaction', [
+                'user_id' => $user->id,
+                'reason' => $e->getMessage(),
+            ]);
+
             return [
                 'success' => false,
                 'message' => 'Invalid transaction token signature.',
@@ -38,7 +44,7 @@ class SubscriptionService
         $originalTxId = (string) ($txData['originalTransactionId'] ?? $txData['original_transaction_id'] ?? $txData['transactionId'] ?? $txData['transaction_id'] ?? '');
         $transactionId = (string) ($txData['transactionId'] ?? $txData['transaction_id'] ?? $originalTxId);
         $environment = $txData['environment'] ?? 'Sandbox';
-        
+
         // One purchase, one account: a valid JWS handed to a friend must not
         // entitle their account too.
         $owner = Subscription::where('original_transaction_id', $originalTxId)->value('user_id');
@@ -132,13 +138,22 @@ class SubscriptionService
     public function handleAppStoreWebhook(array $payload): bool
     {
         $signedPayload = $payload['signedPayload'] ?? null;
-        if (!$signedPayload) {
+        if (! $signedPayload) {
             Log::warning('No signedPayload in App Store webhook', $payload);
+
             return false;
         }
 
-        $decoded = $this->jwsDecoder->decode($signedPayload);
-        if (!$decoded) {
+        // The webhook endpoint is public by design, so Apple's signature is its
+        // only trust boundary. An unverified payload could revoke or extend any
+        // subscription whose original transaction id the sender happened to know.
+        try {
+            $decoded = $this->jwsDecoder->verify($signedPayload);
+        } catch (\Throwable $e) {
+            Log::warning('Rejected App Store webhook with unverifiable payload', [
+                'reason' => $e->getMessage(),
+            ]);
+
             return false;
         }
 
@@ -148,8 +163,24 @@ class SubscriptionService
         $data = $decoded['data'] ?? [];
         $environment = $data['environment'] ?? 'Sandbox';
 
+        // The nested transaction is signed separately and carries the fields that
+        // drive entitlement state, so it is verified on its own terms.
         $signedTx = $data['signedTransactionInfo'] ?? null;
-        $txData = $signedTx ? $this->jwsDecoder->decode($signedTx) : null;
+        $txData = null;
+
+        if ($signedTx) {
+            try {
+                $txData = $this->jwsDecoder->verify($signedTx);
+            } catch (\Throwable $e) {
+                Log::warning('Rejected App Store webhook with unverifiable transaction info', [
+                    'notification_type' => $notificationType,
+                    'reason' => $e->getMessage(),
+                ]);
+
+                return false;
+            }
+        }
+
         $originalTxId = $txData['originalTransactionId'] ?? null;
 
         // Log notification
@@ -163,13 +194,14 @@ class SubscriptionService
             'processed_at' => now(),
         ]);
 
-        if (!$originalTxId) {
+        if (! $originalTxId) {
             return true;
         }
 
         $subscription = Subscription::where('original_transaction_id', $originalTxId)->first();
-        if (!$subscription) {
+        if (! $subscription) {
             Log::info("Subscription not found for webhook originalTx: {$originalTxId}");
+
             return true;
         }
 

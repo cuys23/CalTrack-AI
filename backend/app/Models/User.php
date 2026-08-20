@@ -62,7 +62,7 @@ class User extends Authenticatable
             ->where('status', 'active')
             ->where(function ($query) {
                 $query->whereNull('expires_at')
-                      ->orWhere('expires_at', '>', now());
+                    ->orWhere('expires_at', '>', now());
             })
             ->latestOfMany();
     }

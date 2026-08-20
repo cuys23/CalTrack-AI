@@ -103,6 +103,8 @@ export interface UserGoals {
   targetDate: string;
   weeklyPace: number; // kg/week
   autoRecalculate: boolean;
+  bmr?: number;
+  tdee?: number;
 }
 
 export interface UserProfile {
@@ -113,7 +115,7 @@ export interface UserProfile {
   heightCm: number;
   currentWeightKg: number;
   targetWeightKg: number;
-  activityLevel: 'sedentary' | 'light' | 'moderate' | 'very_active';
+  activityLevel: 'sedentary' | 'light' | 'moderate' | 'very_active' | 'active';
   goal: 'lose' | 'maintain' | 'gain';
   dietType: 'standard' | 'vegetarian' | 'vegan' | 'keto';
   isPro: boolean;
@@ -127,4 +129,9 @@ export interface UserProfile {
   appDaysCount: number;
   totalLoggedMeals: number;
   totalWeightLostKg: number;
+  eatingHabits?: string[];
+  timeCommitment?: string;
+  interestedFeatures?: string[];
+  bmr?: number;
+  tdee?: number;
 }

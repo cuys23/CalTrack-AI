@@ -11,10 +11,10 @@ class TdeeService
      * Activity multipliers based on standard Harris-Benedict / Mifflin-St Jeor formulas.
      */
     const ACTIVITY_MULTIPLIERS = [
-        'sedentary'   => 1.2,    // Ít vận động (làm việc văn phòng)
-        'light'       => 1.375,  // Vận động nhẹ (tập 1-3 ngày/tuần)
-        'moderate'    => 1.55,   // Vận động vừa (tập 3-5 ngày/tuần)
-        'active'      => 1.725,  // Năng động (tập 6-7 ngày/tuần)
+        'sedentary' => 1.2,    // Ít vận động (làm việc văn phòng)
+        'light' => 1.375,  // Vận động nhẹ (tập 1-3 ngày/tuần)
+        'moderate' => 1.55,   // Vận động vừa (tập 3-5 ngày/tuần)
+        'active' => 1.725,  // Năng động (tập 6-7 ngày/tuần)
         'very_active' => 1.9,    // Rất năng động (vận động viên, lao động nặng)
     ];
 
@@ -37,6 +37,7 @@ class TdeeService
     public function calculateTdee(int $bmr, string $activityLevel = 'sedentary'): int
     {
         $multiplier = self::ACTIVITY_MULTIPLIERS[strtolower($activityLevel)] ?? 1.2;
+
         return (int) round($bmr * $multiplier);
     }
 

@@ -1,4 +1,8 @@
+import { apiClient } from './apiClient';
 import { FoodItem, IngredientItem, MicroNutrients, MacroNutrients, NutrientSource } from '../types';
+
+/** Macros are shown to one decimal; more digits imply precision the data lacks. */
+const round1 = (n: number): number => Math.round(n * 10) / 10;
 
 export interface FkbFoodEntry {
   fkbId: string;
@@ -254,10 +258,48 @@ export class AiFoodEngine {
   }
 
   // 4. Barcode Scan Matcher
-  public static async scanBarcode(code: string): Promise<FoodItem> {
-    await new Promise((resolve) => setTimeout(resolve, 900));
-    const entry = FKB_DATABASE[0];
-    return this.createFoodItemFromFkb(entry, entry.defaultGrams, undefined, 'verified');
+  /**
+   * Resolve a scanned barcode against the product database (decision 0004).
+   *
+   * Returns null when the product is unknown or the lookup fails. Vietnamese
+   * coverage in Open Food Facts is thin, so this happens often and the caller
+   * must offer manual entry — the previous version returned a fixed food no
+   * matter what was scanned, which quietly logged the wrong product.
+   */
+  public static async scanBarcode(code: string): Promise<FoodItem | null> {
+    try {
+      const res = await apiClient.lookupBarcode(code);
+      const f = res.food;
+      const now = new Date();
+
+      return {
+        id: `barcode-${code}-${now.getTime()}`,
+        name: f.name,
+        mealType: 'snack',
+        time: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+        date: now.toISOString().split('T')[0],
+        // Nutrition is published per 100g; the portion starts at the serving
+        // size on the package and the user adjusts from there.
+        calories: Math.round((f.calories * f.serving_grams) / 100),
+        portion: 1,
+        portionUnit: 'phần',
+        portionGrams: f.serving_grams,
+        macros: {
+          protein: round1((f.protein_g * f.serving_grams) / 100),
+          carbs: round1((f.carbs_g * f.serving_grams) / 100),
+          fat: round1((f.fat_g * f.serving_grams) / 100),
+        },
+        // The app scores out of 10; the API scores out of 100.
+        healthScore: Math.round(f.health_score / 10),
+        confidence: 'high',
+        source: 'verified',
+        fkbSourceLabel: 'Open Food Facts',
+        imageUrl: f.image_url ?? undefined,
+        barcode: f.barcode,
+      };
+    } catch {
+      return null;
+    }
   }
 
   // 5. Natural Language NLP Parser
