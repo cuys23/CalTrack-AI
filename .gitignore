@@ -40,3 +40,10 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Harness core maintenance binary
+scripts/bin/harness
+scripts/bin/harness.exe
+
+# local env files (chứa key thật)
+.env

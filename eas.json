@@ -19,21 +19,21 @@
     },
     "production": {
       "autoIncrement": true,
-      "ios": {
-        "bundleIdentifier": "com.caltrack.app"
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.caltrack.ai/api",
+        "EXPO_PUBLIC_APP_ENV": "production"
       },
       "android": {
-        "buildType": "app-bundle",
-        "package": "com.caltrack.app"
+        "buildType": "app-bundle"
       }
     }
   },
   "submit": {
     "production": {
       "ios": {
-        "appleId": "apple-developer@caltrack.ai",
-        "ascAppId": "6470000000",
-        "appleTeamId": "TEAMID1234"
+        "appleId": "appbrats99@gmail.com",
+        "ascAppId": "16857264462",
+        "appleTeamId": "KS362JT4QN"
       }
     }
   }

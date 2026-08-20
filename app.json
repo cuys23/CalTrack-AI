@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "CalTrack AI",
+    "name": "CalorieIQ",
     "slug": "caltrack-expo",
     "scheme": "caltrack-expo",
     "version": "1.0.0",
@@ -9,18 +9,20 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.caltrack.app",
+      "bundleIdentifier": "com.vin.calorielq",
+      "usesAppleSignIn": true,
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Ứng dụng cần quyền truy cập camera để chụp và nhận diện món ăn bằng AI.",
         "NSPhotoLibraryUsageDescription": "Ứng dụng cần quyền truy cập thư viện ảnh để phân tích món ăn."
       }
     },
     "android": {
-      "package": "com.caltrack.app",
+      "package": "com.vin.calorielq",
       "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -43,10 +45,30 @@
           "photosPermission": "Ứng dụng cần quyền truy cập thư viện ảnh để phân tích món ăn."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-apple-authentication",
+      "expo-iap",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.215154433573-i9snto731a0u075523i9en3oa3rtq4vm"
+        }
+      ],
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "Ứng dụng đọc số bước chân và calo tiêu hao từ Sức khoẻ để tính chính xác lượng calo bạn còn lại trong ngày.",
+          "NSHealthUpdateUsageDescription": "Ứng dụng ghi cân nặng bạn nhập vào Sức khoẻ để đồng bộ với các ứng dụng khác."
+        }
+      ]
     ],
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "86141218-ef79-4dab-9af9-e07b3234493a"
+      }
     }
   }
 }
