@@ -39,6 +39,22 @@ class SubscriptionService
         $transactionId = (string) ($txData['transactionId'] ?? $txData['transaction_id'] ?? $originalTxId);
         $environment = $txData['environment'] ?? 'Sandbox';
         
+        // One purchase, one account: a valid JWS handed to a friend must not
+        // entitle their account too.
+        $owner = Subscription::where('original_transaction_id', $originalTxId)->value('user_id');
+        if ($owner && $owner !== $user->id) {
+            Log::warning('Transaction replayed on a different account', [
+                'original_transaction_id' => $originalTxId,
+                'owner_id' => $owner,
+                'claimed_by' => $user->id,
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'Giao dịch này đã được sử dụng cho một tài khoản khác.',
+            ];
+        }
+
         $purchaseDate = isset($txData['purchaseDate']) ? Carbon::createFromTimestampMs($txData['purchaseDate']) : now();
         $expiresDate = isset($txData['expiresDate']) ? Carbon::createFromTimestampMs($txData['expiresDate']) : now()->addMonth();
 

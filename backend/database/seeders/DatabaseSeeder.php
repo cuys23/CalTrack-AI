@@ -15,7 +15,7 @@ class DatabaseSeeder extends Seeder
     {
         // 1. Subscription Products (Required for Apple IAP StoreKit 2)
         SubscriptionProduct::updateOrCreate(
-            ['product_id' => 'com.caltrack.monthly_pro'],
+            ['product_id' => 'com.vin.calorielq.monthly_pro'],
             [
                 'name' => 'CalTrack Pro Hàng Tháng',
                 'type' => 'auto_renewable',
@@ -27,7 +27,7 @@ class DatabaseSeeder extends Seeder
         );
 
         $yearly = SubscriptionProduct::updateOrCreate(
-            ['product_id' => 'com.caltrack.yearly_pro'],
+            ['product_id' => 'com.vin.calorielq.yearly_pro'],
             [
                 'name' => 'CalTrack Pro 1 Năm (Tiết kiệm 50%)',
                 'type' => 'auto_renewable',
@@ -39,7 +39,7 @@ class DatabaseSeeder extends Seeder
         );
 
         $lifetime = SubscriptionProduct::updateOrCreate(
-            ['product_id' => 'com.caltrack.lifetime_pro'],
+            ['product_id' => 'com.vin.calorielq.lifetime_pro'],
             [
                 'name' => 'CalTrack Pro Trọn Đời',
                 'type' => 'non_consumable',

@@ -26,6 +26,7 @@ class User extends Authenticatable
         'activity_level',
         'avatar_url',
         'apple_user_id',
+        'google_user_id',
     ];
 
     protected $hidden = [

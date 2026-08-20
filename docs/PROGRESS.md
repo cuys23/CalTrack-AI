@@ -13,8 +13,8 @@
 | Wave | Hạng Mục | Trạng Thái | Tiến Độ | Ghi Chú |
 | :--- | :--- | :---: | :---: | :--- |
 | **Wave 0** | Chuẩn bị & Foundation Infrastructure | ✅ **DONE** | 100% | Docker, Laravel 12, Sanctum, Expo SDK 57 SecureStore/NetInfo, EAS Config |
-| **Wave 1** | Authentication & User Profile Sync | ✅ **DONE** | 100% | AuthModal, SecureStore persistence, TDEE Goal calculation, Delete Account |
-| **Wave 2** | Apple IAP Backend & StoreKit 2 | ✅ **DONE** | 100% | StoreKit 2 Paywall, Restore Purchases, JWS verify, Webhook V2, CheckPremium |
+| **Wave 1** | Authentication & User Profile Sync | ✅ **DONE** | 100% | Apple & Google Sign-In thật (verify identity token qua JWKS của từng nhà cung cấp), SecureStore, TDEE Goal, Delete Account |
+| **Wave 2** | Apple IAP Backend & StoreKit 2 | ✅ **DONE** | 100% | expo-iap (StoreKit 2), Restore, JWS verify đầy đủ (x5c chain → Apple Root CA G3), chống replay giao dịch, Webhook V2, CheckPremium |
 | **Wave 3** | AI Vision + Meal Pipeline (Queue) | ✅ **DONE** | 100% | Gemini/GPT-4o Vision API, NutritionValidator, Redis Queue, Camera fallback |
 | **Wave 4** | Dashboard, Weight & Offline-First Sync | ✅ **DONE** | 100% | Daily/Weekly aggregates, Weight tracking, Local cache + Cloud sync |
 | **Wave 5** | Security, Legal & App Store Compliance | ✅ **DONE** | 100% | Privacy Policy, Terms, EULA, Delete Account (Apple 5.1.1), Rate Limiting |
@@ -36,12 +36,15 @@
 - [x] Backend: `TdeeService` & `GoalCalculator` (Mifflin-St Jeor).
 - [x] APIs: `/api/auth/register`, `/api/auth/login`, `/api/auth/apple`, `/api/me`, `/api/profile`, `/api/goals`.
 - [x] Frontend: `AuthModal.tsx` đồng bộ token qua `expo-secure-store`, `SignInScreen` kết nối API thực tế.
+- [x] `expo-apple-authentication` + backend `IdentityTokenVerifier` (JWKS, iss/aud/exp) — `apple_user_id` chỉ lấy từ claim `sub` đã verify.
+- [x] `@react-native-google-signin/google-signin` + backend verify `id_token` qua Google JWKS; `google_user_id` chỉ lấy từ claim `sub`.
 
 ### 💳 Wave 2 — Apple IAP & StoreKit 2 (DONE)
 - [x] Backend: `subscription_products`, `subscriptions`, `iap_transactions`, `app_store_notifications`.
 - [x] Backend: `AppleJwsDecoder`, `SubscriptionService`, `CheckPremium` middleware.
 - [x] Webhook: Tiếp nhận và xử lý Apple Server Notifications V2 JWS.
-- [x] Frontend: Màn hình `PaywallScreen` kết nối `apiClient.verifyIapPurchase` và nút `Restore Purchases`.
+- [x] Frontend: `PaywallScreen` dùng `expo-iap` (StoreKit 2), giá lấy từ App Store, verify JWS ở server trước khi `finishTransaction`.
+- [x] `AppleJwsDecoder` verify chain x5c về Apple Root CA G3 + ES256 + `bundleId`; một `originalTransactionId` chỉ thuộc một tài khoản.
 
 ### 🤖 Wave 3 — AI Vision & Meal Queue System (DONE)
 - [x] Backend: `meal_logs`, `foods`, `UploadService`.
